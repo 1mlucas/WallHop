@@ -190,6 +190,51 @@ func _test_continue() -> void:
 	main.call("_show_title")
 
 
+func _tap(pos: Vector2) -> void:
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ev.position = pos
+	main.call("_input", ev)
+
+
+## Regression: tapping the character (not only its price) must buy it, and a tap
+## in the shop must never start the game.
+func _test_shop_taps() -> void:
+	main.set("save_enabled", false)
+	main.set("owned", ["ninja_frog"] as Array[String])
+	main.call("_select_character", "ninja_frog")
+	main.call("_show_title")
+	var c: Dictionary = Catalog.CHARACTERS[1]
+	var price := int(c["price"])
+	var on_character := Vector2(main.W * 0.5, main.PICK_Y)
+	var on_price := Vector2(main.W * 0.5, main.PICK_Y + 110.0)
+
+	_tap((main.NEXT_RECT as Rect2).get_center())
+	_check(int(main.get("preview_idx")) == 1, "tapping next should show the second character")
+	main.set("wallet", price - 1)
+	_tap(on_character)
+	_check(int(main.get("mode")) == main.Mode.TITLE, "tapping a locked character must not start the game")
+	_check(not (main.get("owned") as Array).has(c["id"]), "must not buy without enough points")
+
+	main.set("wallet", price)
+	_tap(on_character)
+	_check((main.get("owned") as Array).has(c["id"]), "tapping the character must buy it")
+	_check(int(main.get("wallet")) == 0, "buying by tapping must take the price")
+	_check(int(main.get("mode")) == main.Mode.TITLE, "buying must not start the game")
+
+	main.set("owned", ["ninja_frog"] as Array[String])
+	main.set("wallet", price)
+	main.call("_refresh_picker")
+	_tap(on_price)
+	_check((main.get("owned") as Array).has(c["id"]), "tapping the price must buy it")
+
+	main.set("owned", ["ninja_frog"] as Array[String])
+	main.set("wallet", 0)
+	main.call("_select_character", "ninja_frog")
+	main.call("_show_title")
+
+
 # ---------------------------------------------------------------- simulation
 
 func _start_run() -> void:
@@ -201,6 +246,7 @@ func _start_run() -> void:
 		_test_shop()
 		_test_fruit_trail()
 		_test_continue()
+		_test_shop_taps()
 	seed(1000 + run)
 	main.call("_on_tap") # start the game
 	step = 0
