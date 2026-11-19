@@ -38,6 +38,12 @@ const NEXT_RECT := Rect2(W - 230.0, PICK_Y - 60.0, 120.0, 120.0)
 const BUY_RECT := Rect2(W * 0.5 - 200.0, PICK_Y + 85.0, 400.0, 90.0)
 const BACK_RECT := Rect2(24.0, H - 150.0, 120.0, 120.0)
 const GOLD := Color(1, 0.85, 0.3)
+# Game over buttons (centres); each button reacts inside a square of BUTTON_SIZE.
+const OVER_BUTTONS_Y := 820.0
+const BUTTON_SIZE := 200.0
+# Continue: fruit-point price of the 1st, 2nd... continue in one run. Its size is the limit.
+const CONTINUE_COSTS: Array[int] = [100, 250]
+const INVULN_TIME := 1.5 # seconds of protection after a continue
 const TRAIL_EVERY := 0.03
 # Middle fruit trails: fruit stays out of reach of a player holding a wall.
 const TRAIL_HALF_WIDTH := 150.0
@@ -72,8 +78,13 @@ var trail_timer := 0.0
 var shake := 0.0
 var dead_vel := 0.0
 var tap_lock_until := 0
+var continues_used := 0
+var banked := 0 # fruit points of this run already added to the wallet
+var invuln := 0.0
 ## Test hook: when true, hits are counted instead of killing the player.
 var god_mode := false
+## Test hook: when false, nothing is written to the save file.
+var save_enabled := true
 var god_hits := 0
 
 var bg: TextureRect
@@ -128,6 +139,9 @@ var preview: AnimatedSprite2D
 var price_label: Label
 var wallet_label: Label
 var earned_label: Label
+var restart_icon: Sprite2D
+var continue_icon: Sprite2D
+var continue_cost_label: Label
 
 var sfx := {}
 var music: AudioStreamPlayer
@@ -388,7 +402,10 @@ func _build_over_screen(layer: CanvasLayer) -> void:
 	over_dots = _zone_dots(over_screen, 530.0)
 	earned_label = _icon_row(over_screen, apple_tex, 3.0, 56, Vector2(0, 575))
 	earned_label.add_theme_color_override("font_color", GOLD)
-	_pulse_icon(over_screen, "res://assets/art/btn_restart.png", Vector2(W * 0.5, 820.0), 5.0)
+	restart_icon = _pulse_icon(over_screen, "res://assets/art/btn_restart.png", Vector2(W * 0.5, OVER_BUTTONS_Y), 4.5)
+	continue_icon = _pulse_icon(over_screen, "res://assets/art/btn_play.png", Vector2(W * 0.5, OVER_BUTTONS_Y), 4.5)
+	continue_cost_label = _icon_row(over_screen, apple_tex, 2.2, 40, Vector2(0, OVER_BUTTONS_Y + 70.0))
+	continue_cost_label.add_theme_color_override("font_color", GOLD)
 	var back := Sprite2D.new()
 	back.texture = load("res://assets/art/btn_back.png")
 	back.scale = Vector2(S, S) * 1.2
@@ -562,7 +579,7 @@ func _load_save() -> void:
 
 
 func _save() -> void:
-	if god_mode:
+	if god_mode or not save_enabled:
 		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("game", "best", best)
@@ -605,6 +622,10 @@ func _start_game() -> void:
 	combo = 0
 	fruit_count = 0
 	fruit_points = 0
+	banked = 0
+	continues_used = 0
+	invuln = 0.0
+	player.modulate.a = 1.0
 	score = 0
 	speed = BASE_SPEED
 	buffered = false
@@ -699,9 +720,84 @@ func _die() -> void:
 	if is_best:
 		best = score
 	best_zone = maxi(best_zone, zone)
-	wallet += fruit_points
+	wallet += fruit_points - banked
+	banked = fruit_points
 	_save()
 	get_tree().create_timer(0.7).timeout.connect(_show_game_over.bind(is_best))
+
+
+## Restart on the left, continue (with its price) on the right. Without any
+## continue left, restart sits alone in the middle.
+func _layout_over_buttons() -> void:
+	var cost := continue_cost()
+	var cost_row := continue_cost_label.get_parent() as HBoxContainer
+	continue_icon.visible = cost >= 0
+	cost_row.visible = cost >= 0
+	if cost < 0:
+		restart_icon.position.x = W * 0.5
+		return
+	restart_icon.position.x = W * 0.5 - 150.0
+	continue_icon.position.x = W * 0.5 + 150.0
+	# Centre the price under the continue icon (the row spans the screen width).
+	cost_row.position.x = 150.0
+	continue_cost_label.text = str(cost)
+	var can_pay := wallet >= cost
+	continue_icon.modulate = Color.WHITE if can_pay else Color(0.45, 0.45, 0.45)
+	continue_cost_label.add_theme_color_override("font_color", GOLD if can_pay else Color(0.6, 0.6, 0.6))
+
+
+func _button_rect(icon: Sprite2D) -> Rect2:
+	return Rect2(icon.position - Vector2.ONE * BUTTON_SIZE * 0.5, Vector2.ONE * BUTTON_SIZE)
+
+
+## Price of the next continue in this run, or -1 if no continue is left.
+func continue_cost() -> int:
+	if continues_used >= CONTINUE_COSTS.size():
+		return -1
+	return CONTINUE_COSTS[continues_used]
+
+
+## Pays for a continue and resumes the run where it ended. Returns true on success.
+func try_continue() -> bool:
+	var cost := continue_cost()
+	if mode != Mode.DEAD or cost < 0 or wallet < cost:
+		return false
+	wallet -= cost
+	continues_used += 1
+	_save()
+	_revive()
+	return true
+
+
+## Back into the same run: same score, zone and distance; the screen is cleared,
+## the next hazards come after a breather and the player is briefly protected.
+func _revive() -> void:
+	for c in world.get_children():
+		c.queue_free()
+	since_row = -BREATHER
+	combo = 0
+	combo_label.visible = false
+	flying = false
+	buffered = false
+	player.rotation = 0.0
+	player.position = Vector2(_cling_x(on_left), PLAYER_Y)
+	player.flip_h = not on_left
+	player.play("wall")
+	invuln = INVULN_TIME
+	mode = Mode.PLAY
+	over_screen.visible = false
+	dim.visible = false
+	hud.visible = true
+	_play_music(music_level)
+
+
+func _on_continue_pressed() -> void:
+	if Time.get_ticks_msec() < tap_lock_until or not continue_icon.visible:
+		return
+	if try_continue():
+		_sfx("highscore")
+	else:
+		_sfx("hit")
 
 
 func _show_game_over(is_best: bool) -> void:
@@ -716,6 +812,7 @@ func _show_game_over(is_best: bool) -> void:
 	(over_best_label.get_parent() as Control).visible = not is_best
 	_fill_zone_dots(over_dots, zone)
 	earned_label.text = "+%d" % fruit_points
+	_layout_over_buttons()
 	over_screen.visible = true
 	if is_best:
 		_sfx("highscore")
@@ -735,8 +832,13 @@ func _input(event: InputEvent) -> void:
 			if mode == Mode.TITLE and _picker_click(mb.position):
 				get_viewport().set_input_as_handled()
 				return
-			if mode == Mode.DEAD and BACK_RECT.has_point(mb.position):
-				_back_to_title()
+			if mode == Mode.DEAD:
+				if BACK_RECT.has_point(mb.position):
+					_back_to_title()
+				elif continue_icon.visible and _button_rect(continue_icon).has_point(mb.position):
+					_on_continue_pressed()
+				elif _button_rect(restart_icon).has_point(mb.position):
+					_on_tap()
 				get_viewport().set_input_as_handled()
 				return
 			pressed = true
@@ -748,6 +850,9 @@ func _input(event: InputEvent) -> void:
 				return
 			if mode == Mode.DEAD and (k.keycode == KEY_ESCAPE or k.keycode == KEY_BACKSPACE):
 				_back_to_title()
+				return
+			if mode == Mode.DEAD and k.keycode == KEY_C:
+				_on_continue_pressed()
 				return
 			if mode == Mode.TITLE:
 				match k.keycode:
@@ -869,6 +974,7 @@ func _update_play(delta: float) -> void:
 	_scroll(speed, delta)
 	score = int(meters()) + fruit_points
 	score_label.text = str(score)
+	_update_invuln(delta)
 
 	var z := Zones.index_at(meters())
 	if z != zone:
@@ -908,10 +1014,18 @@ func _update_play(delta: float) -> void:
 		if h.touches(player.position, PLAYER_R):
 			if h.kind == "fruit":
 				_collect(h)
-			elif h.is_deadly():
+			elif h.is_deadly() and invuln <= 0.0:
 				_die()
 				if mode != Mode.PLAY:
 					return
+
+
+## Blinks the player while the post-continue protection lasts.
+func _update_invuln(delta: float) -> void:
+	if invuln <= 0.0:
+		return
+	invuln = maxf(0.0, invuln - delta)
+	player.modulate.a = 1.0 if invuln <= 0.0 or int(invuln * 10.0) % 2 == 0 else 0.35
 
 
 func _update_dead(delta: float) -> void:
