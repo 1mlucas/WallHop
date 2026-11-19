@@ -35,7 +35,8 @@ const MUTE_RECT := Rect2(W - 100.0, 30.0, 80.0, 80.0)
 const PICK_Y := 1010.0
 const PREV_RECT := Rect2(110.0, PICK_Y - 60.0, 120.0, 120.0)
 const NEXT_RECT := Rect2(W - 230.0, PICK_Y - 60.0, 120.0, 120.0)
-const BUY_RECT := Rect2(W * 0.5 - 200.0, PICK_Y + 85.0, 400.0, 90.0)
+# Tapping the character itself or its price buys / selects it (between the arrows).
+const BUY_RECT := Rect2(W * 0.5 - 130.0, PICK_Y - 90.0, 260.0, 280.0)
 const BACK_RECT := Rect2(24.0, H - 150.0, 120.0, 120.0)
 const GOLD := Color(1, 0.85, 0.3)
 # Game over buttons (centres); each button reacts inside a square of BUTTON_SIZE.
@@ -451,7 +452,7 @@ func _build_picker(parent: Control) -> void:
 		arrow.scale = Vector2(S, S)
 		arrow.position = (pair[1] as Rect2).get_center()
 		picker.add_child(arrow)
-	price_label = _icon_row(picker, apple_tex, 2.6, 48, Vector2(0, BUY_RECT.position.y + 5.0))
+	price_label = _icon_row(picker, apple_tex, 2.6, 48, Vector2(0, PICK_Y + 90.0))
 
 
 func _refresh_picker() -> void:
@@ -506,10 +507,34 @@ func _on_buy_pressed() -> void:
 		_sfx("click")
 	elif try_buy(id):
 		_sfx("highscore")
-		shake = 6.0
+		_refresh_picker()
+		_pop_preview()
+		return
 	else:
 		_sfx("hit")
+		_shake_price()
 	_refresh_picker()
+
+
+## Bought: the character lights up with a little bounce.
+func _pop_preview() -> void:
+	var base := Vector2(4, 4)
+	preview.modulate = Color(2.0, 2.0, 2.0)
+	var tw := preview.create_tween().set_parallel()
+	tw.tween_property(preview, "scale", base * 1.35, 0.12).set_trans(Tween.TRANS_BACK)
+	tw.tween_property(preview, "modulate", Color.WHITE, 0.45)
+	tw.chain().tween_property(preview, "scale", base, 0.25).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+
+
+## Not enough points: the price shakes and flashes red.
+func _shake_price() -> void:
+	var row := price_label.get_parent() as Control
+	var x := 0.0 # the price row spans the screen width, so it rests at x = 0
+	row.modulate = Color(1.0, 0.35, 0.35)
+	var tw := row.create_tween()
+	for dx: float in [-18.0, 18.0, -12.0, 12.0, -6.0, 0.0]:
+		tw.tween_property(row, "position:x", x + dx, 0.04)
+	tw.tween_property(row, "modulate", Color.WHITE, 0.2)
 
 
 func _make_corner_label(text: String, font_size: int, pos: Vector2) -> Label:
