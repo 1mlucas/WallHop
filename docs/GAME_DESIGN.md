@@ -11,7 +11,8 @@ a next goal ("I want to see the Night Tower") on top of their best score.
 3. Grab fruit for points, on the walls and in random zigzag trails down the middle
    (4-6 fruit, random spacing; hop back and forth to collect them). A fruit streak raises the combo multiplier.
 4. Reach the next zone: banner, new background, new hazard.
-5. Die, bank the fruit points, buy a new character in the shop, play again.
+5. Die, bank the fruit points, then choose: continue (pay fruit points), restart,
+   or go back to the title to buy a new character.
 
 ## Zones (one run passes through them in order)
 Distance is measured in meters (60 px = 1 m). Score = meters + fruit points.
@@ -54,7 +55,14 @@ zone name and a background crossfade.
 ## Screens: icons over text
 Title and game over use icons and numbers instead of sentences:
 - Title: logo, trophy + best score, one coloured bar per zone (lit up to the furthest zone), pulsing play icon, character picker (locked characters show apple + price), wallet in the corner.
-- Game over: big score, trophy + best (or NEW BEST!), zone bars for this run, apple + fruit points earned, pulsing restart icon (tap anywhere to play again), back icon to return to the title and shop.
+- Game over: big score, trophy + best (or NEW BEST!), zone bars for this run, apple + fruit points earned, restart icon and continue icon (with its price), back icon to return to the title and shop.
+
+## Continue
+After a game over the player can continue the same run instead of restarting:
+- Paid with fruit points: 100 for the first continue, 250 for the second; at most 2 per run, so best scores still mean something.
+- The run keeps its score, zone and distance. Hazards on screen are cleared, the next ones come after a breather, and the player is protected (blinking) for 1.5 s. The combo resets.
+- Fruit points are banked at every death, but only the part not banked before (no double counting).
+- Later: "watch an ad to continue" once ads are added.
 
 ## Characters and shop
 Fruit points from every run are banked into a wallet and spent in the shop on
