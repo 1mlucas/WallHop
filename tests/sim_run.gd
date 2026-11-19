@@ -24,6 +24,8 @@ var motions_seen := {}
 var unfair_frames := 0
 var ball_on_wall_frames := 0
 var fireball_out_frames := 0
+var shake_frames := 0
+var bg_moved_frames := 0
 var center_fruit_ids := {}
 
 
@@ -235,6 +237,64 @@ func _test_shop_taps() -> void:
 	main.call("_show_title")
 
 
+## Comfort rules against motion sickness and eye strain (docs/GAME_DESIGN.md).
+func _test_comfort() -> void:
+	_check(Hazard.FIRE_WARN > main.FLY_TIME, "fire must warn longer than a hop takes")
+	_check(main.BASE_SPEED + main.MAX_EXTRA_SPEED <= 420.0, "top scroll speed must stay at or below 420 px/s")
+	_check(main.CLING_R - main.CLING_L <= 380.0, "a hop should cross at most 380 px")
+
+	# Protection after a continue: a soft pulse, at most 3 dips per second, never fully hidden.
+	var player: Node2D = main.get("player")
+	main.set("invuln", main.INVULN_TIME)
+	var alphas: Array[float] = []
+	for i in int(main.INVULN_TIME * 60.0) + 2: # +2: float rounding leaves a tiny remainder
+		main.call("_update_invuln", 1.0 / 60.0)
+		alphas.append(player.modulate.a)
+	var dips := 0
+	var lowest := 1.0
+	for i in range(1, alphas.size() - 1):
+		lowest = minf(lowest, alphas[i])
+		if alphas[i] < alphas[i - 1] and alphas[i] <= alphas[i + 1]:
+			dips += 1
+	_check(float(dips) / main.INVULN_TIME <= 3.0, "protection pulse is %.1f dips/s, must be <= 3" % (float(dips) / main.INVULN_TIME))
+	_check(lowest >= 0.25, "player must stay visible while protected (alpha %.2f)" % lowest)
+	_check(player.modulate.a == 1.0, "player must be fully visible after the protection")
+
+	# Eased hop: slow at the start, fastest in the middle.
+	main.call("_start_game")
+	main.call("_begin_jump")
+	var xs: Array[float] = [player.position.x]
+	while main.get("flying"):
+		main.call("_process", 1.0 / 60.0)
+		xs.append(player.position.x)
+	var first := absf(xs[1] - xs[0])
+	var fastest := 0.0
+	for i in range(1, xs.size()):
+		fastest = maxf(fastest, absf(xs[i] - xs[i - 1]))
+	_check(first < fastest * 0.35, "hop should start slowly (first step %.1f px, fastest %.1f px)" % [first, fastest])
+
+	# Reduced motion: no afterimages, no embers or sparks.
+	main.set("reduced_motion", true)
+	var fx: Node2D = main.get("fx")
+	for c in fx.get_children():
+		fx.remove_child(c)
+		c.free()
+	main.call("_begin_jump")
+	while main.get("flying"):
+		main.call("_process", 1.0 / 60.0)
+	var ghosts := 0
+	for c in fx.get_children():
+		if c is Sprite2D and (c as Sprite2D).texture != main.get("dust_tex"):
+			ghosts += 1
+	_check(ghosts == 0, "reduced motion must not leave afterimages (%d found)" % ghosts)
+	main.call("_spawn_fireball", 400.0)
+	var world: Node2D = main.get("world")
+	var ball := world.get_child(world.get_child_count() - 1) as Hazard
+	_check(ball.sparks == null, "reduced motion must not burst sparks")
+	main.set("reduced_motion", false)
+	main.call("_show_title")
+
+
 # ---------------------------------------------------------------- simulation
 
 func _start_run() -> void:
@@ -247,6 +307,7 @@ func _start_run() -> void:
 		_test_fruit_trail()
 		_test_continue()
 		_test_shop_taps()
+		_test_comfort()
 	seed(1000 + run)
 	main.call("_on_tap") # start the game
 	step = 0
@@ -257,6 +318,8 @@ func _start_run() -> void:
 	unfair_frames = 0
 	ball_on_wall_frames = 0
 	fireball_out_frames = 0
+	shake_frames = 0
+	bg_moved_frames = 0
 	center_fruit_ids = {}
 
 
@@ -269,6 +332,10 @@ func _step() -> void:
 		tap_timer = randf_range(0.25, 1.2)
 
 	zones_seen[main.get("zone")] = true
+	if main.position != Vector2.ZERO:
+		shake_frames += 1
+	if (main.get("bg") as Control).position.y != 0.0:
+		bg_moved_frames += 1
 	var walls: Array[bool] = main.call("deadly_walls")
 	if walls[0] and walls[1]:
 		unfair_frames += 1
@@ -304,6 +371,8 @@ func _end_run() -> void:
 	for m: int in [Hazard.Motion.SLIDE, Hazard.Motion.SWING, Hazard.Motion.FIRE, Hazard.Motion.SHOOT]:
 		_check(motions_seen.has(m), "run %d never used motion %d" % [run, m])
 	_check(unfair_frames == 0, "run %d: both walls deadly at once in %d frames" % [run, unfair_frames])
+	_check(shake_frames == 0, "run %d: the screen moved (shake) in %d frames" % [run, shake_frames])
+	_check(bg_moved_frames == 0, "run %d: the background scrolled in %d frames" % [run, bg_moved_frames])
 	_check(fireball_out_frames == 0, "run %d: fireball left the shaft in %d frames" % [run, fireball_out_frames])
 	_check(center_fruit >= 20, "run %d: only %d fruit spawned in the middle" % [run, center_fruit])
 	_check(ball_on_wall_frames == 0, "run %d: swinging ball reached a wall in %d frames" % [run, ball_on_wall_frames])

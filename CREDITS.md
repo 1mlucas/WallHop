@@ -4,7 +4,7 @@ All third-party assets used in this project are released under **CC0 (public dom
 
 ## Art
 - **Pixel Adventure 1** by Pixel Frog - <https://pixelfrog-assets.itch.io/pixel-adventure-1> (CC0)
-  - Used: Ninja Frog, Mask Dude, Pink Man, Virtual Guy, fruits, saw and chain, spikes, fire, spiked ball and chain, backgrounds (blue, green, brown, purple, gray), dust particle, volume / previous / next / play / restart / back / leaderboard buttons
+  - Used: Ninja Frog, Mask Dude, Pink Man, Virtual Guy, fruits, saw and chain, spikes, fire, spiked ball and chain, backgrounds (blue, green, brown, purple, gray), dust particle, volume / previous / next / play / restart / back / leaderboard / settings buttons
 
 ## Music
 - **5 Action Chiptunes** by Juhani Junkala (CC0) - tracks used: "Title Screen", "Level 1"

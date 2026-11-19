@@ -1,5 +1,5 @@
 extends Node2D
-## Wall Hop - v0.3
+## Wall Hop - v0.3.1
 ## Tap to hop to the opposite wall. Dodge hazards, grab fruit, travel through zones.
 
 const Art := preload("res://scripts/art.gd")
@@ -14,17 +14,18 @@ const W := 720.0
 const H := 1280.0
 const S := 3.0
 const TILE := 16.0 * S
-const WALL_W := TILE * 2.0
+const WALL_W := TILE * 3.0 # thicker walls: a shorter hop for the eyes (360 px instead of 456)
+const WALL_TILE := 16.0 * 4.0 # bricks drawn bigger, so fewer edges pass by per second
 const CLING_L := WALL_W + 36.0
 const CLING_R := W - WALL_W - 36.0
 const PLAYER_Y := 900.0
 
 # --- Feel ---
-const FLY_TIME := 0.28
+const FLY_TIME := 0.36 # eased hop: speeds up, then slows down before the wall
 const ARC := 70.0
 const PLAYER_R := 24.0
 const BASE_SPEED := 280.0
-const MAX_EXTRA_SPEED := 260.0
+const MAX_EXTRA_SPEED := 140.0 # top scroll speed 420 px/s (was 540)
 const BREATHER := 450.0 # empty space after a zone change
 const MAX_COMBO := 5
 const SAVE_PATH := "user://wallhop.cfg"
@@ -45,9 +46,15 @@ const BUTTON_SIZE := 200.0
 # Continue: fruit-point price of the 1st, 2nd... continue in one run. Its size is the limit.
 const CONTINUE_COSTS: Array[int] = [100, 250]
 const INVULN_TIME := 1.5 # seconds of protection after a continue
+# --- Comfort (motion sickness and eye strain) ---
+const INVULN_PULSE_HZ := 1.5 # soft fade, well under 3 flashes per second
+const PULSE_TIME := 0.9 # icon "breathing" half cycle
+const PULSE_SCALE := 1.06
+const BREAK_AFTER := 15.0 * 60.0 # seconds of play before a "take a break" reminder
+const MOTION_RECT := Rect2(W - 100.0, 120.0, 80.0, 80.0)
 const TRAIL_EVERY := 0.03
 # Middle fruit trails: fruit stays out of reach of a player holding a wall.
-const TRAIL_HALF_WIDTH := 150.0
+const TRAIL_HALF_WIDTH := 110.0
 const TRAIL_MIN_STEP_X := 80.0
 
 var mode: Mode = Mode.TITLE
@@ -61,7 +68,6 @@ var buffered := false
 var speed := 0.0
 var distance := 0.0
 var scroll := 0.0
-var bg_scroll := 0.0
 var since_row := 0.0
 var zone := 0
 var combo := 0
@@ -76,9 +82,15 @@ var owned: Array[String] = ["ninja_frog"]
 var selected := "ninja_frog"
 var preview_idx := 0
 var trail_timer := 0.0
-var shake := 0.0
 var dead_vel := 0.0
 var tap_lock_until := 0
+var reduced_motion := false # fewer moving effects (trails, embers, sparks, pulsing icons)
+var play_seconds := 0.0 # since the last break reminder
+var pulses: Array[Dictionary] = [] # {"node": Sprite2D, "tween": Tween, "scale": Vector2}
+var motion_btn: TextureRect
+var motion_slash: ColorRect
+var break_label: Label
+var wall_haze: Array[ColorRect] = []
 var continues_used := 0
 var banked := 0 # fruit points of this run already added to the wallet
 var invuln := 0.0
@@ -163,6 +175,7 @@ func _ready() -> void:
 	_build_ui()
 	_build_audio()
 	_apply_mute()
+	_apply_motion()
 	_show_title()
 
 
@@ -219,14 +232,14 @@ func _build_fire_fx() -> void:
 	shrink_curve.add_point(Vector2(1.0, 0.0))
 
 
-func _tiled(path: String, size_px: Vector2) -> TextureRect:
+func _tiled(path: String, size_px: Vector2, px_scale: float = S) -> TextureRect:
 	var t := TextureRect.new()
 	t.texture = load(path)
 	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	t.stretch_mode = TextureRect.STRETCH_TILE
 	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	t.scale = Vector2(S, S)
-	t.size = size_px / S
+	t.scale = Vector2(px_scale, px_scale)
+	t.size = size_px / px_scale
 	return t
 
 
@@ -236,11 +249,21 @@ func _build_background() -> void:
 	bg_next = _tiled("res://assets/art/bg_blue.png", Vector2(W, H + 64.0 * S))
 	bg_next.modulate.a = 0.0
 	add_child(bg_next)
-	wall_l = _tiled("res://assets/art/brick.png", Vector2(WALL_W, H + TILE * 2.0))
-	wall_r = _tiled("res://assets/art/brick.png", Vector2(WALL_W, H + TILE * 2.0))
+	var wall_px := WALL_TILE / 16.0
+	wall_l = _tiled("res://assets/art/brick.png", Vector2(WALL_W, H + WALL_TILE * 2.0), wall_px)
+	wall_r = _tiled("res://assets/art/brick.png", Vector2(WALL_W, H + WALL_TILE * 2.0), wall_px)
 	wall_r.position.x = W - WALL_W
 	add_child(wall_l)
 	add_child(wall_r)
+	# A still, semi-transparent layer over the moving bricks lowers their contrast.
+	for x in [0.0, W - WALL_W]:
+		var haze := ColorRect.new()
+		haze.position = Vector2(x, 0)
+		haze.size = Vector2(WALL_W, H)
+		haze.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(haze)
+		wall_haze.append(haze)
+	_tint_haze(Color.WHITE)
 	for x in [WALL_W, W - WALL_W - 6.0]:
 		var edge := ColorRect.new()
 		edge.color = Color(0, 0, 0, 0.25)
@@ -334,9 +357,31 @@ func _pulse_icon(parent: Node, path: String, pos: Vector2, sc: float) -> Sprite2
 	sp.scale = Vector2(sc, sc)
 	parent.add_child(sp)
 	var tw := sp.create_tween().set_loops()
-	tw.tween_property(sp, "scale", Vector2(sc, sc) * 1.12, 0.5).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(sp, "scale", Vector2(sc, sc), 0.5).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(sp, "scale", Vector2(sc, sc) * PULSE_SCALE, PULSE_TIME).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(sp, "scale", Vector2(sc, sc), PULSE_TIME).set_trans(Tween.TRANS_SINE)
+	pulses.append({"node": sp, "tween": tw, "scale": Vector2(sc, sc)})
 	return sp
+
+
+## Reduced motion: stops the pulsing icons (others effects check the flag when spawned).
+func _apply_motion() -> void:
+	for p: Dictionary in pulses:
+		var tw: Tween = p["tween"]
+		if reduced_motion:
+			tw.pause()
+			(p["node"] as Sprite2D).scale = p["scale"]
+		else:
+			tw.play()
+	if motion_slash:
+		motion_slash.visible = reduced_motion
+		motion_btn.modulate.a = 0.6 if reduced_motion else 1.0
+
+
+func _toggle_motion() -> void:
+	reduced_motion = not reduced_motion
+	_apply_motion()
+	_save()
+	_sfx("click")
 
 
 func _screen(layer: CanvasLayer) -> Control:
@@ -379,6 +424,16 @@ func _build_ui() -> void:
 	mute_slash.rotation_degrees = 45.0
 	mute_slash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mute_btn.add_child(mute_slash)
+	motion_btn = TextureRect.new()
+	motion_btn.texture = load("res://assets/art/btn_motion.png")
+	motion_btn.scale = Vector2(S, S)
+	motion_btn.position = MOTION_RECT.position + Vector2(8, 8)
+	motion_btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_screen.add_child(motion_btn)
+	motion_slash = mute_slash.duplicate() as ColorRect
+	motion_btn.add_child(motion_slash)
+	break_label = _make_label(over_screen, "TAKE A BREAK", 40, 1000.0)
+	break_label.add_theme_color_override("font_color", Color(0.7, 0.9, 1.0))
 
 
 ## Title: logo, trophy + best, zone bars, pulsing play icon, character picker, wallet.
@@ -596,6 +651,7 @@ func _load_save() -> void:
 		best = int(cfg.get_value("game", "best", 0))
 		best_zone = int(cfg.get_value("game", "best_zone", 0))
 		muted = bool(cfg.get_value("settings", "muted", false))
+		reduced_motion = bool(cfg.get_value("settings", "reduced_motion", false))
 		wallet = int(cfg.get_value("shop", "wallet", 0))
 		owned.assign(cfg.get_value("shop", "owned", ["ninja_frog"]))
 		selected = str(cfg.get_value("shop", "selected", "ninja_frog"))
@@ -610,6 +666,7 @@ func _save() -> void:
 	cfg.set_value("game", "best", best)
 	cfg.set_value("game", "best_zone", best_zone)
 	cfg.set_value("settings", "muted", muted)
+	cfg.set_value("settings", "reduced_motion", reduced_motion)
 	cfg.set_value("shop", "wallet", wallet)
 	cfg.set_value("shop", "owned", owned)
 	cfg.set_value("shop", "selected", selected)
@@ -689,6 +746,7 @@ func _enter_zone(z: int, instant: bool) -> void:
 		bg_next.modulate.a = 0.0
 		wall_l.modulate = wall_tint
 		wall_r.modulate = wall_tint
+		_tint_haze(wall_tint)
 		return
 	since_row = -BREATHER
 	bg_next.texture = tex
@@ -697,6 +755,8 @@ func _enter_zone(z: int, instant: bool) -> void:
 	tw.tween_property(bg_next, "modulate:a", 1.0, 0.8)
 	tw.tween_property(wall_l, "modulate", wall_tint, 0.8)
 	tw.tween_property(wall_r, "modulate", wall_tint, 0.8)
+	for haze in wall_haze:
+		tw.tween_property(haze, "color", Color(0.6 * wall_tint.r, 0.24 * wall_tint.g, 0.22 * wall_tint.b, 0.45), 0.8)
 	tw.chain().tween_callback(_finish_bg_swap.bind(tex, bg_tint))
 	_show_banner("ZONE %d" % (z + 1), data["name"])
 	_sfx("highscore")
@@ -737,7 +797,6 @@ func _die() -> void:
 	flying = false
 	player.play("hit")
 	dead_vel = -520.0
-	shake = 14.0
 	_sfx("hit")
 	music.stop()
 	tap_lock_until = Time.get_ticks_msec() + 700
@@ -837,6 +896,10 @@ func _show_game_over(is_best: bool) -> void:
 	(over_best_label.get_parent() as Control).visible = not is_best
 	_fill_zone_dots(over_dots, zone)
 	earned_label.text = "+%d" % fruit_points
+	# After a long session, a gentle reminder to rest the eyes (once per 15 minutes of play).
+	break_label.visible = play_seconds >= BREAK_AFTER
+	if break_label.visible:
+		play_seconds = 0.0
 	_layout_over_buttons()
 	over_screen.visible = true
 	if is_best:
@@ -852,6 +915,10 @@ func _input(event: InputEvent) -> void:
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
 			if MUTE_RECT.has_point(mb.position):
 				_toggle_mute()
+				get_viewport().set_input_as_handled()
+				return
+			if mode == Mode.TITLE and MOTION_RECT.has_point(mb.position):
+				_toggle_motion()
 				get_viewport().set_input_as_handled()
 				return
 			if mode == Mode.TITLE and _picker_click(mb.position):
@@ -872,6 +939,9 @@ func _input(event: InputEvent) -> void:
 		if k.pressed and not k.echo:
 			if k.keycode == KEY_M:
 				_toggle_mute()
+				return
+			if mode == Mode.TITLE and k.keycode == KEY_R:
+				_toggle_motion()
 				return
 			if mode == Mode.DEAD and (k.keycode == KEY_ESCAPE or k.keycode == KEY_BACKSPACE):
 				_back_to_title()
@@ -967,25 +1037,25 @@ func _process(delta: float) -> void:
 			_update_play(delta)
 		Mode.DEAD:
 			_update_dead(delta)
-	if shake > 0.0:
-		shake = maxf(0.0, shake - delta * 40.0)
-		position = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * shake
-	else:
-		position = Vector2.ZERO
 
 
+## Only the walls scroll; the background stays still so the whole screen never
+## drifts (a big cause of motion sickness).
 func _scroll(spd: float, delta: float) -> void:
 	scroll += spd * delta
-	bg_scroll += spd * 0.3 * delta
 	_apply_scroll()
 
 
 func _apply_scroll() -> void:
-	var y := -64.0 * S + fmod(bg_scroll, 64.0 * S)
-	bg.position.y = y
-	bg_next.position.y = y
-	wall_l.position.y = -TILE + fmod(scroll, TILE)
+	bg.position.y = 0.0
+	bg_next.position.y = 0.0
+	wall_l.position.y = -WALL_TILE + fmod(scroll, WALL_TILE)
 	wall_r.position.y = wall_l.position.y
+
+
+func _tint_haze(tint: Color) -> void:
+	for haze in wall_haze:
+		haze.color = Color(0.6 * tint.r, 0.24 * tint.g, 0.22 * tint.b, 0.45)
 
 
 func meters() -> float:
@@ -1000,6 +1070,7 @@ func _update_play(delta: float) -> void:
 	score = int(meters()) + fruit_points
 	score_label.text = str(score)
 	_update_invuln(delta)
+	play_seconds += delta
 
 	var z := Zones.index_at(meters())
 	if z != zone:
@@ -1008,10 +1079,11 @@ func _update_play(delta: float) -> void:
 	if flying:
 		fly_t += delta / FLY_TIME
 		var t := minf(fly_t, 1.0)
-		player.position.x = lerpf(fly_from, fly_to, t)
+		# Smoothstep: no sudden start or stop, so the eyes can follow the hop.
+		player.position.x = lerpf(fly_from, fly_to, t * t * (3.0 - 2.0 * t))
 		player.position.y = PLAYER_Y - sin(t * PI) * ARC
 		trail_timer -= delta
-		if trail_timer <= 0.0:
+		if trail_timer <= 0.0 and not reduced_motion:
 			trail_timer = TRAIL_EVERY
 			_spawn_ghost()
 		if fly_t >= 1.0:
@@ -1045,12 +1117,17 @@ func _update_play(delta: float) -> void:
 					return
 
 
-## Blinks the player while the post-continue protection lasts.
+## Softly fades the player in and out while the post-continue protection lasts
+## (a slow pulse, not a hard blink).
 func _update_invuln(delta: float) -> void:
 	if invuln <= 0.0:
 		return
 	invuln = maxf(0.0, invuln - delta)
-	player.modulate.a = 1.0 if invuln <= 0.0 or int(invuln * 10.0) % 2 == 0 else 0.35
+	if invuln <= 0.0:
+		player.modulate.a = 1.0
+	else:
+		var since := INVULN_TIME - invuln
+		player.modulate.a = 0.65 + 0.35 * cos(TAU * INVULN_PULSE_HZ * since)
 
 
 func _update_dead(delta: float) -> void:
@@ -1209,8 +1286,8 @@ func _spawn_fire(left: bool, y: float, phase: float) -> void:
 func _spawn_ball(y: float) -> void:
 	var h := _make_hazard("ball", Vector2(W * 0.5, y), 30.0)
 	h.motion = Hazard.Motion.SWING
-	h.length = 190.0
-	h.amp = deg_to_rad(50.0)
+	h.length = 150.0
+	h.amp = deg_to_rad(45.0)
 	h.period = randf_range(1.6, 2.1)
 	h.phase = randf() * h.period
 	var anchor := Sprite2D.new()
@@ -1294,6 +1371,9 @@ func _spawn_fireball(y: float) -> void:
 	h.add_child(sparks)
 	h.sparks = sparks
 	h.followers.assign([glow, trail])
+	if reduced_motion:
+		trail.emitting = false
+		h.sparks = null
 	h.tick(0.0, 0.0)
 
 

@@ -28,10 +28,28 @@ Distance is measured in meters (60 px = 1 m). Score = meters + fruit points.
 Each zone change gives a breather (no hazards for a moment), a banner with the
 zone name and a background crossfade.
 
+## Comfort rules (checked by `tests/sim_run.gd`)
+Playtesters reported dizziness, headaches, eye strain and nausea after long
+sessions. These rules apply to every new feature:
+- **No screen shake.** The camera never moves on its own.
+- **Still background.** Only the walls scroll; the background never drifts.
+- **Calm walls.** Bricks are drawn larger (64 px) under a still, semi-transparent
+  haze that lowers their contrast.
+- **Short, eased hops.** 360 px between the walls, 0.36 s, smoothstep easing
+  (slow start, slow stop).
+- **Top scroll speed 420 px/s.**
+- **No hard blinking.** Anything that flashes stays at or below 3 dips per
+  second (the protection after a continue is a soft 1.5 Hz fade).
+- **Calm UI.** Tap icons breathe slowly (0.9 s, 6%) instead of pulsing.
+- **Reduced motion** option (gear icon on the title screen, or R): no
+  afterimages, no embers or sparks, still icons. Saved between sessions.
+- **Break reminder.** After 15 minutes of play, the game over screen shows
+  "TAKE A BREAK".
+
 ## Fairness rules (checked by `tests/sim_run.gd`)
 - Both walls are never deadly at the player's height at the same moment.
   The player can always survive by being on the right wall.
-- Fire jets always warn (flicker) for longer than a hop takes (0.35 s vs 0.28 s).
+- Fire jets always warn (flicker) for longer than a hop takes (0.45 s vs 0.36 s).
 - Two fires on opposite walls never burn at the same time.
 - Swinging balls never reach a player who is holding a wall.
 - Fireballs stay inside the shaft and are only ever at one wall at a time.
@@ -101,7 +119,8 @@ Ideas that use sprites already in Pixel Adventure 1 (CC0):
 |---------|-------|
 | v0.2 | Zones 1-5, moving / switching / swinging hazards, fruit combo, landing dust, mute button, headless simulation test |
 | v0.3 | Middle fruit trails, bouncing fireballs, corner HUD, fruit values, character shop with hop trails |
-| v0.3.x | Pause, fill the iPhone screen (safe area), balance from playtesting |
+| v0.3.1 | Comfort pass against motion sickness and eye strain (see Comfort rules) |
+| next | Pause, fill the iPhone screen (safe area), balance from playtesting |
 | v0.4 | Power-ups and missions |
 | v0.5 | New zones (Ice Cave, Crusher Hall), settings screen |
 | v1.0 | iOS export, TestFlight, App Store |
