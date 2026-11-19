@@ -5,7 +5,7 @@ extends Node2D
 enum Motion { NONE, SLIDE, SWING, FIRE, SHOOT }
 
 const FIRE_PERIOD := 2.4
-const FIRE_WARN := 0.35 # flicker time before burning; longer than a hop (0.28 s)
+const FIRE_WARN := 0.45 # flicker time before burning; longer than a hop (0.36 s)
 const FIRE_BURN := 0.85
 
 var kind := "" # saw, spike, fire, ball, fruit
