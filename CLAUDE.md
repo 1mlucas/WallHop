@@ -2,7 +2,7 @@
 
 ## Project
 One-tap pixel-art mobile game (portrait 720x1280, iOS first) built with Godot 4.x and GDScript.
-Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.1.
+Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.2.
 
 ## About the owner
 - Not a game developer. QA/automation engineer (Java, Python) who wants Claude to write the code.
@@ -12,7 +12,11 @@ Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current v
 ## Layout
 - `scenes/main.tscn` - entry scene, only holds the script
 - `scripts/main.gd` - game flow, player, spawning, collisions, UI (everything is built in code)
+- `scripts/zones.gd` - zone table (looks, start distance, pattern weights)
+- `scripts/hazard.gd` - scrolling hazard/fruit node: motion, hit capsule
 - `scripts/art.gd` - sprite sheet to SpriteFrames helper
+- `tests/sim_run.gd` - headless simulation + fairness test (must pass before a PR)
+- `docs/GAME_DESIGN.md` - design doc: zones, fairness rules, ideas, roadmap
 - `assets/art/` - Pixel Adventure 1 sprites (Pixel Frog, CC0)
 - `assets/audio/sfx`, `assets/audio/music` - OGG files (Juhani Junkala, CC0)
 - `Licenses/`, `CREDITS.md` - keep updated whenever an asset is added
@@ -28,7 +32,7 @@ Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current v
 Godot 4.x can run headless, for example:
 `godot --headless --path . --quit-after 120`
 or with a simulation script: `godot --headless --path . --script path/to/sim.gd`
-Always run the project headless after changing scripts, and tell the owner to press F5 to check visuals and feel.
+Always run the project headless and `tests/sim_run.gd` after changing scripts, and tell the owner to press F5 to check visuals and feel.
 
 ## Workflow per milestone
 Never commit straight to `main`; every change goes through a branch and a Pull Request.
@@ -41,5 +45,6 @@ Never commit straight to `main`; every change goes through a branch and a Pull R
 7. Publish the release: `gh release create vX.Y --title "vX.Y - summary" --notes "..."`
 
 ## Roadmap
-- v0.2: balance and feel tweaks from playtesting, dust and pop effects, character select, mute button
+See `docs/GAME_DESIGN.md` for the full roadmap.
+- v0.3: character select, balance from playtesting, pause
 - later: more hazards, settings, iOS export (Xcode + Apple Developer account), ads/IAP plugins
