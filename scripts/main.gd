@@ -35,8 +35,13 @@ const MUTE_RECT := Rect2(W - 100.0, 30.0, 80.0, 80.0)
 const PICK_Y := 1010.0
 const PREV_RECT := Rect2(110.0, PICK_Y - 60.0, 120.0, 120.0)
 const NEXT_RECT := Rect2(W - 230.0, PICK_Y - 60.0, 120.0, 120.0)
-const BUY_RECT := Rect2(W * 0.5 - 200.0, PICK_Y + 95.0, 400.0, 80.0)
+const BUY_RECT := Rect2(W * 0.5 - 200.0, PICK_Y + 85.0, 400.0, 90.0)
+const BACK_RECT := Rect2(24.0, H - 150.0, 120.0, 120.0)
+const GOLD := Color(1, 0.85, 0.3)
 const TRAIL_EVERY := 0.03
+# Middle fruit trails: fruit stays out of reach of a player holding a wall.
+const TRAIL_HALF_WIDTH := 150.0
+const TRAIL_MIN_STEP_X := 80.0
 
 var mode: Mode = Mode.TITLE
 var flying := false
@@ -84,6 +89,11 @@ var collected_frames: SpriteFrames
 var fire_frames: SpriteFrames
 var fireball_frames: SpriteFrames
 var launcher_tex: AtlasTexture
+var glow_tex: GradientTexture2D
+var additive: CanvasItemMaterial
+var ember_ramp: Gradient
+var spark_ramp: Gradient
+var shrink_curve: Curve
 var fruit_frames := {}
 var spike_tex: Texture2D
 var saw_chain_tex: Texture2D
@@ -97,20 +107,25 @@ var hud: Control
 var score_label: Label
 var fruit_label: Label
 var combo_label: Label
+var title_screen: Control
+var over_screen: Control
 var title_label: Label
-var tap_label: Label
 var best_label: Label
-var over_label: Label
+var title_dots: Array[ColorRect] = []
 var result_label: Label
-var zone_label: Label
+var new_best_label: Label
+var over_best_label: Label
+var over_dots: Array[ColorRect] = []
+var trophy_tex: Texture2D
+var apple_tex: Texture2D
 var banner_small: Label
 var banner_big: Label
+var banner_tweens: Array[Tween] = []
 var mute_btn: TextureRect
 var mute_slash: ColorRect
 var picker: Control
 var preview: AnimatedSprite2D
-var char_name_label: Label
-var buy_label: Label
+var price_label: Label
 var wallet_label: Label
 var earned_label: Label
 
@@ -147,7 +162,8 @@ func _build_art() -> void:
 		"on": {"path": "res://assets/art/fire_on.png", "w": 16, "h": 32, "fps": 14.0},
 	})
 	# Fireball: only the flame (top half) of the fire sprite. Launcher: only the block (bottom half).
-	fireball_frames = Art.build({"fly": {"path": "res://assets/art/fire_on.png", "w": 16, "h": 16, "fps": 14.0}})
+	fireball_frames = Art.build({"fly": {"path": "res://assets/art/fire_on.png", "w": 16, "h": 16, "fps": 20.0}})
+	_build_fire_fx()
 	launcher_tex = AtlasTexture.new()
 	launcher_tex.atlas = load("res://assets/art/fire_off.png")
 	launcher_tex.region = Rect2(0, 16, 16, 16)
@@ -160,6 +176,32 @@ func _build_art() -> void:
 	dust_tex = load("res://assets/art/dust.png")
 	for z: Dictionary in Zones.LIST:
 		bg_textures[z["bg"]] = load(z["bg"])
+
+
+## Shared resources for the fireball: soft glow, additive blending, ember colours.
+func _build_fire_fx() -> void:
+	var g := Gradient.new()
+	g.set_color(0, Color(1.0, 0.8, 0.35, 0.8))
+	g.set_color(1, Color(1.0, 0.3, 0.0, 0.0))
+	glow_tex = GradientTexture2D.new()
+	glow_tex.gradient = g
+	glow_tex.fill = GradientTexture2D.FILL_RADIAL
+	glow_tex.fill_from = Vector2(0.5, 0.5)
+	glow_tex.fill_to = Vector2(1.0, 0.5)
+	glow_tex.width = 128
+	glow_tex.height = 128
+	additive = CanvasItemMaterial.new()
+	additive.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	ember_ramp = Gradient.new()
+	ember_ramp.set_color(0, Color(1.0, 0.85, 0.3, 1.0))
+	ember_ramp.add_point(0.35, Color(1.0, 0.45, 0.1, 0.95))
+	ember_ramp.set_color(1, Color(0.55, 0.1, 0.05, 0.0))
+	spark_ramp = Gradient.new()
+	spark_ramp.set_color(0, Color(1.0, 0.9, 0.4, 1.0))
+	spark_ramp.set_color(1, Color(1.0, 0.4, 0.0, 0.0))
+	shrink_curve = Curve.new()
+	shrink_curve.add_point(Vector2(0.0, 1.0))
+	shrink_curve.add_point(Vector2(1.0, 0.0))
 
 
 func _tiled(path: String, size_px: Vector2) -> TextureRect:
@@ -201,22 +243,98 @@ func _build_player() -> void:
 	add_child(player)
 
 
+func _style_label(l: Label, font_size: int) -> void:
+	l.add_theme_font_size_override("font_size", font_size)
+	l.add_theme_color_override("font_color", Color.WHITE)
+	l.add_theme_color_override("font_outline_color", Color(0.1, 0.1, 0.2))
+	l.add_theme_constant_override("outline_size", int(font_size / 6.0))
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+
 func _make_label(parent: Node, text: String, font_size: int, y: float) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.position = Vector2(0, y)
 	l.custom_minimum_size = Vector2(W, 0)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", font_size)
-	l.add_theme_color_override("font_color", Color.WHITE)
-	l.add_theme_color_override("font_outline_color", Color(0.1, 0.1, 0.2))
-	l.add_theme_constant_override("outline_size", int(font_size / 6.0))
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_style_label(l, font_size)
 	parent.add_child(l)
 	return l
 
 
+## A row with an icon and a number. Centred across the screen unless `centered` is false.
+## Returns the label; its parent is the row (hide the row to hide both).
+func _icon_row(parent: Control, tex: Texture2D, icon_scale: float, font_size: int, pos: Vector2, centered: bool = true) -> Label:
+	var row := HBoxContainer.new()
+	row.position = pos
+	row.add_theme_constant_override("separation", 14)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if centered:
+		row.custom_minimum_size = Vector2(W, 0)
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+	parent.add_child(row)
+	var icon := TextureRect.new()
+	icon.texture = tex
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.custom_minimum_size = tex.get_size() * icon_scale
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon)
+	var l := Label.new()
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_style_label(l, font_size)
+	row.add_child(l)
+	return l
+
+
+## One small coloured bar per zone; filled up to the zone reached.
+func _zone_dots(parent: Control, y: float) -> Array[ColorRect]:
+	var row := HBoxContainer.new()
+	row.position = Vector2(0, y)
+	row.custom_minimum_size = Vector2(W, 0)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(row)
+	var dots: Array[ColorRect] = []
+	for i in Zones.LIST.size():
+		var d := ColorRect.new()
+		d.custom_minimum_size = Vector2(48, 18)
+		d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(d)
+		dots.append(d)
+	return dots
+
+
+func _fill_zone_dots(dots: Array[ColorRect], reached: int) -> void:
+	for i in dots.size():
+		dots[i].color = (Zones.LIST[i]["color"] as Color) if i <= reached else Color(0, 0, 0, 0.35)
+
+
+## A big icon that gently pulses, used as the "tap" hint instead of text.
+func _pulse_icon(parent: Node, path: String, pos: Vector2, sc: float) -> Sprite2D:
+	var sp := Sprite2D.new()
+	sp.texture = load(path)
+	sp.position = pos
+	sp.scale = Vector2(sc, sc)
+	parent.add_child(sp)
+	var tw := sp.create_tween().set_loops()
+	tw.tween_property(sp, "scale", Vector2(sc, sc) * 1.12, 0.5).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(sp, "scale", Vector2(sc, sc), 0.5).set_trans(Tween.TRANS_SINE)
+	return sp
+
+
+func _screen(layer: CanvasLayer) -> Control:
+	var c := Control.new()
+	c.size = Vector2(W, H)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(c)
+	return c
+
+
 func _build_ui() -> void:
+	trophy_tex = load("res://assets/art/icon_trophy.png")
+	apple_tex = (fruit_frames["apple"] as SpriteFrames).get_frame_texture("spin", 0)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	dim = ColorRect.new()
@@ -225,15 +343,8 @@ func _build_ui() -> void:
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(dim)
 	_build_hud(layer)
-	_build_picker(layer)
-	earned_label = _make_label(layer, "", 36, 680.0)
-	earned_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
-	title_label = _make_label(layer, "WALL HOP", 110, 260.0)
-	tap_label = _make_label(layer, "TAP TO START", 56, 760.0)
-	best_label = _make_label(layer, "BEST 0", 48, 560.0)
-	zone_label = _make_label(layer, "", 36, 630.0)
-	over_label = _make_label(layer, "GAME OVER", 96, 330.0)
-	result_label = _make_label(layer, "SCORE 0", 64, 470.0)
+	_build_title_screen(layer)
+	_build_over_screen(layer)
 	banner_small = _make_label(layer, "", 40, 330.0)
 	banner_big = _make_label(layer, "", 84, 380.0)
 	banner_small.modulate.a = 0.0
@@ -254,9 +365,35 @@ func _build_ui() -> void:
 	mute_slash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	mute_btn.add_child(mute_slash)
 
-	var blink := create_tween().set_loops()
-	blink.tween_property(tap_label, "modulate:a", 0.25, 0.6)
-	blink.tween_property(tap_label, "modulate:a", 1.0, 0.6)
+
+## Title: logo, trophy + best, zone bars, pulsing play icon, character picker, wallet.
+func _build_title_screen(layer: CanvasLayer) -> void:
+	title_screen = _screen(layer)
+	title_label = _make_label(title_screen, "WALL HOP", 110, 230.0)
+	best_label = _icon_row(title_screen, trophy_tex, S, 52, Vector2(0, 400))
+	title_dots = _zone_dots(title_screen, 500.0)
+	_pulse_icon(title_screen, "res://assets/art/btn_play.png", Vector2(W * 0.5, 690.0), 5.0)
+	wallet_label = _icon_row(title_screen, apple_tex, 2.4, 44, Vector2(20, 28), false)
+	wallet_label.add_theme_color_override("font_color", GOLD)
+	_build_picker(title_screen)
+
+
+## Game over: big score, best (or NEW BEST!), zone bars, fruit earned, restart / back icons.
+func _build_over_screen(layer: CanvasLayer) -> void:
+	over_screen = _screen(layer)
+	result_label = _make_label(over_screen, "0", 140, 230.0)
+	new_best_label = _make_label(over_screen, "NEW BEST!", 56, 430.0)
+	new_best_label.add_theme_color_override("font_color", GOLD)
+	over_best_label = _icon_row(over_screen, trophy_tex, S, 48, Vector2(0, 430))
+	over_dots = _zone_dots(over_screen, 530.0)
+	earned_label = _icon_row(over_screen, apple_tex, 3.0, 56, Vector2(0, 575))
+	earned_label.add_theme_color_override("font_color", GOLD)
+	_pulse_icon(over_screen, "res://assets/art/btn_restart.png", Vector2(W * 0.5, 820.0), 5.0)
+	var back := Sprite2D.new()
+	back.texture = load("res://assets/art/btn_back.png")
+	back.scale = Vector2(S, S) * 1.2
+	back.position = BACK_RECT.get_center()
+	over_screen.add_child(back)
 
 
 ## Top-left corner: score, fruit count and combo, so the middle stays clear for fruit.
@@ -273,38 +410,31 @@ func _build_hud(layer: CanvasLayer) -> void:
 	score_label = _make_corner_label("0", 60, Vector2(32, 26))
 	var icon := TextureRect.new()
 	icon.texture = (fruit_frames["apple"] as SpriteFrames).get_frame_texture("spin", 0)
-	icon.scale = Vector2(1.5, 1.5)
-	icon.position = Vector2(26, 108)
+	icon.scale = Vector2(2.2, 2.2)
+	icon.position = Vector2(14, 92)
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(icon)
-	fruit_label = _make_corner_label("x 0", 36, Vector2(80, 112))
+	fruit_label = _make_corner_label("0", 40, Vector2(86, 108))
 	combo_label = _make_corner_label("", 34, Vector2(28, 182))
 	combo_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
 
 
-## Title screen: preview of a character, arrows to browse, buy button, wallet.
-func _build_picker(layer: CanvasLayer) -> void:
+## Character picker: preview, arrows to browse, price (apple + number) when locked.
+func _build_picker(parent: Control) -> void:
 	picker = Control.new()
 	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(picker)
-	var holder := Node2D.new()
-	picker.add_child(holder)
+	parent.add_child(picker)
 	preview = AnimatedSprite2D.new()
 	preview.scale = Vector2(4, 4)
 	preview.position = Vector2(W * 0.5, PICK_Y)
-	holder.add_child(preview)
+	picker.add_child(preview)
 	for pair: Array in [["res://assets/art/btn_prev.png", PREV_RECT], ["res://assets/art/btn_next.png", NEXT_RECT]]:
-		var arrow := TextureRect.new()
+		var arrow := Sprite2D.new()
 		arrow.texture = load(pair[0])
 		arrow.scale = Vector2(S, S)
-		var r: Rect2 = pair[1]
-		arrow.position = r.get_center() - Vector2(21, 22) * S * 0.5
-		arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		arrow.position = (pair[1] as Rect2).get_center()
 		picker.add_child(arrow)
-	char_name_label = _make_label(picker, "", 40, PICK_Y + 55.0)
-	buy_label = _make_label(picker, "", 40, BUY_RECT.position.y + 14.0)
-	wallet_label = _make_label(picker, "", 32, BUY_RECT.end.y + 10.0)
-	wallet_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+	price_label = _icon_row(picker, apple_tex, 2.6, 48, Vector2(0, BUY_RECT.position.y + 5.0))
 
 
 func _refresh_picker() -> void:
@@ -312,17 +442,17 @@ func _refresh_picker() -> void:
 	var id: String = c["id"]
 	preview.sprite_frames = Catalog.character_frames(id)
 	preview.play("idle")
-	char_name_label.text = c["name"]
+	var price_row := price_label.get_parent() as Control
 	if owned.has(id):
 		preview.modulate = Color.WHITE
-		buy_label.text = "SELECTED" if id == selected else "TAP TO SELECT"
-		buy_label.add_theme_color_override("font_color", Color(0.6, 1, 0.6))
+		price_row.visible = false
 	else:
 		preview.modulate = Color(0.15, 0.15, 0.2)
 		var price := int(c["price"])
-		buy_label.text = ("BUY: %d" % price) if wallet >= price else ("NEED %d" % price)
-		buy_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3) if wallet >= price else Color(0.7, 0.7, 0.7))
-	wallet_label.text = "FRUIT POINTS: %d" % wallet
+		price_label.text = str(price)
+		price_label.add_theme_color_override("font_color", GOLD if wallet >= price else Color(0.6, 0.6, 0.6))
+		price_row.visible = true
+	wallet_label.text = str(wallet)
 
 
 func _browse(step: int) -> void:
@@ -446,30 +576,21 @@ func _save() -> void:
 
 # ---------------------------------------------------------------- flow
 
-func _zone_title(z: int) -> String:
-	return "ZONE %d - %s" % [z + 1, Zones.LIST[z]["name"]]
-
-
 func _show_title() -> void:
 	mode = Mode.TITLE
 	_reset_player()
 	_enter_zone(0, true)
 	hud.visible = false
-	earned_label.visible = false
+	over_screen.visible = false
+	_hide_banner()
 	preview_idx = Catalog.character_index(selected)
 	_refresh_picker()
-	picker.visible = true
+	best_label.text = str(best)
+	(best_label.get_parent() as Control).visible = best > 0
+	_fill_zone_dots(title_dots, best_zone)
+	(title_dots[0].get_parent() as Control).visible = best > 0
+	title_screen.visible = true
 	dim.visible = true
-	title_label.visible = true
-	tap_label.text = "TAP TO START"
-	tap_label.visible = true
-	best_label.text = "BEST %d" % best
-	best_label.position.y = 560.0
-	best_label.visible = true
-	zone_label.text = "FURTHEST: %s" % _zone_title(best_zone) if best > 0 else ""
-	zone_label.visible = true
-	over_label.visible = false
-	result_label.visible = false
 	_play_music(music_title)
 
 
@@ -494,15 +615,9 @@ func _start_game() -> void:
 	fruit_label.text = "0"
 	combo_label.visible = false
 	hud.visible = true
-	picker.visible = false
-	earned_label.visible = false
+	title_screen.visible = false
+	over_screen.visible = false
 	dim.visible = false
-	title_label.visible = false
-	tap_label.visible = false
-	best_label.visible = false
-	zone_label.visible = false
-	over_label.visible = false
-	result_label.visible = false
 	_play_music(music_level)
 
 
@@ -548,6 +663,7 @@ func _finish_bg_swap(tex: Texture2D, tint: Color) -> void:
 
 
 func _show_banner(small: String, big: String) -> void:
+	_hide_banner()
 	banner_small.text = small
 	banner_big.text = big
 	for l: Label in [banner_small, banner_big]:
@@ -555,6 +671,16 @@ func _show_banner(small: String, big: String) -> void:
 		tw.tween_property(l, "modulate:a", 1.0, 0.25)
 		tw.tween_interval(1.3)
 		tw.tween_property(l, "modulate:a", 0.0, 0.4)
+		banner_tweens.append(tw)
+
+
+## Removes the zone banner at once (so it never covers the game over screen).
+func _hide_banner() -> void:
+	for tw in banner_tweens:
+		tw.kill()
+	banner_tweens.clear()
+	banner_small.modulate.a = 0.0
+	banner_big.modulate.a = 0.0
 
 
 func _die() -> void:
@@ -583,19 +709,14 @@ func _show_game_over(is_best: bool) -> void:
 		return
 	dim.visible = true
 	hud.visible = false
-	over_label.visible = true
-	result_label.text = "SCORE %d" % score
-	result_label.visible = true
-	best_label.text = "NEW BEST!" if is_best else "BEST %d" % best
-	best_label.position.y = 580.0
-	best_label.visible = true
-	zone_label.text = "REACHED %s" % _zone_title(zone)
-	zone_label.visible = true
-	earned_label.text = "+%d FRUIT POINTS  (TOTAL %d)" % [fruit_points, wallet]
-	earned_label.visible = true
-	tap_label.text = "TAP TO CONTINUE"
-	tap_label.position.y = 780.0
-	tap_label.visible = true
+	_hide_banner()
+	result_label.text = str(score)
+	new_best_label.visible = is_best
+	over_best_label.text = str(best)
+	(over_best_label.get_parent() as Control).visible = not is_best
+	_fill_zone_dots(over_dots, zone)
+	earned_label.text = "+%d" % fruit_points
+	over_screen.visible = true
 	if is_best:
 		_sfx("highscore")
 
@@ -614,12 +735,19 @@ func _input(event: InputEvent) -> void:
 			if mode == Mode.TITLE and _picker_click(mb.position):
 				get_viewport().set_input_as_handled()
 				return
+			if mode == Mode.DEAD and BACK_RECT.has_point(mb.position):
+				_back_to_title()
+				get_viewport().set_input_as_handled()
+				return
 			pressed = true
 	elif event is InputEventKey:
 		var k := event as InputEventKey
 		if k.pressed and not k.echo:
 			if k.keycode == KEY_M:
 				_toggle_mute()
+				return
+			if mode == Mode.DEAD and (k.keycode == KEY_ESCAPE or k.keycode == KEY_BACKSPACE):
+				_back_to_title()
 				return
 			if mode == Mode.TITLE:
 				match k.keycode:
@@ -653,7 +781,6 @@ func _picker_click(pos: Vector2) -> bool:
 func _on_tap() -> void:
 	match mode:
 		Mode.TITLE:
-			tap_label.position.y = 760.0
 			_start_game()
 		Mode.PLAY:
 			if flying:
@@ -662,11 +789,16 @@ func _on_tap() -> void:
 			else:
 				_begin_jump()
 		Mode.DEAD:
-			# Back to the title, where the character shop is; tap again to play.
 			if Time.get_ticks_msec() >= tap_lock_until:
-				tap_label.position.y = 760.0
-				_sfx("click")
-				_show_title()
+				_start_game()
+
+
+## Game over -> title screen (where the character shop is).
+func _back_to_title() -> void:
+	if Time.get_ticks_msec() < tap_lock_until:
+		return
+	_sfx("click")
+	_show_title()
 
 
 func _begin_jump() -> void:
@@ -837,14 +969,24 @@ func _spawn_pattern(pattern: String, y: float) -> float:
 			_spawn_ball(y - 230.0)
 			return 230.0
 		"fruit_trail":
-			# Staggered fruit down the middle: collect them by hopping back and forth.
-			var n := 5
-			var step := 160.0
-			var start_left := randf() < 0.5
+			# Fruit scattered at random down the middle: hop back and forth to collect it.
+			var n := randi_range(4, 6)
+			var lo := W * 0.5 - TRAIL_HALF_WIDTH
+			var hi := W * 0.5 + TRAIL_HALF_WIDTH
+			var fy := y
+			var last_x := randf_range(lo, hi)
 			for i in n:
-				var off := -70.0 if (i % 2 == 0) == start_left else 70.0
-				_spawn_fruit(Vector2(W * 0.5 + off, y - i * step))
-			return (n - 1) * step
+				var x := last_x
+				if i > 0:
+					# Keep neighbours apart so it never collapses into a straight column.
+					x = randf_range(lo, hi)
+					if absf(x - last_x) < TRAIL_MIN_STEP_X:
+						var dir := 1.0 if last_x < W * 0.5 else -1.0
+						x = clampf(last_x + dir * randf_range(TRAIL_MIN_STEP_X, TRAIL_HALF_WIDTH * 2.0), lo, hi)
+					fy -= randf_range(120.0, 220.0)
+				_spawn_fruit(Vector2(x, fy))
+				last_x = x
+			return y - fy
 		"fireball":
 			_spawn_fireball(y)
 		"sky_fruit":
@@ -965,12 +1107,54 @@ func _spawn_fireball(y: float) -> void:
 		base.rotation_degrees = 90.0 if left else -90.0
 		base.position = Vector2((-1.0 if left else 1.0) * (W * 0.5 - WALL_W - 12.0), 0)
 		h.add_child(base)
+	# Soft additive glow behind the flame.
+	var glow := Sprite2D.new()
+	glow.texture = glow_tex
+	glow.material = additive
+	glow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	h.add_child(glow)
+	h.glow = glow
+	# Embers left behind in world space: they rise and fade as the ball moves on.
+	var trail := CPUParticles2D.new()
+	trail.local_coords = false
+	trail.amount = 60
+	trail.lifetime = 0.45
+	trail.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	trail.emission_sphere_radius = 10.0
+	trail.spread = 180.0
+	trail.gravity = Vector2(0, -140)
+	trail.initial_velocity_min = 10.0
+	trail.initial_velocity_max = 45.0
+	trail.scale_amount_min = 8.0
+	trail.scale_amount_max = 15.0
+	trail.scale_amount_curve = shrink_curve
+	trail.color_ramp = ember_ramp
+	h.add_child(trail)
 	var ball := AnimatedSprite2D.new()
 	ball.sprite_frames = fireball_frames
 	ball.scale = Vector2(S, S)
 	ball.play("fly")
 	h.add_child(ball)
 	h.body = ball
+	# Burst of sparks each time the ball touches a wall.
+	var sparks := CPUParticles2D.new()
+	sparks.local_coords = false
+	sparks.emitting = false
+	sparks.one_shot = true
+	sparks.explosiveness = 1.0
+	sparks.amount = 14
+	sparks.lifetime = 0.35
+	sparks.spread = 70.0
+	sparks.gravity = Vector2(0, 500)
+	sparks.initial_velocity_min = 140.0
+	sparks.initial_velocity_max = 300.0
+	sparks.scale_amount_min = 4.0
+	sparks.scale_amount_max = 7.0
+	sparks.scale_amount_curve = shrink_curve
+	sparks.color_ramp = spark_ramp
+	h.add_child(sparks)
+	h.sparks = sparks
+	h.followers.assign([glow, trail])
 	h.tick(0.0, 0.0)
 
 

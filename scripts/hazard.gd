@@ -23,6 +23,10 @@ var flames: Array[AnimatedSprite2D] = []
 var burning := false
 var passed := false # fruit: already went below the player
 var value := 0 # fruit: base points
+var followers: Array[Node2D] = [] # SHOOT: nodes that stay on the fireball (glow, trail)
+var glow: Node2D
+var sparks: CPUParticles2D
+var last_dir := 0.0
 var clock := 0.0
 
 
@@ -43,11 +47,23 @@ func tick(delta: float, dy: float) -> void:
 		Motion.FIRE:
 			_update_fire(fposmod(c, FIRE_PERIOD))
 		Motion.SHOOT:
-			# Bounces wall to wall; the flame tail points away from the direction of travel.
-			var k := fposmod(c / period, 2.0)
-			var to_right := k < 1.0
-			body.position.x = lerpf(-amp, amp, k if to_right else 2.0 - k)
-			body.rotation_degrees = -90.0 if to_right else 90.0
+			# Glides wall to wall, easing in and out at each wall (one crossing per period).
+			var u := PI * c / period
+			body.position.x = -cos(u) * amp
+			var v := sin(u) # > 0 while moving right
+			# The flame tail trails behind; it stands upright for a moment when turning.
+			body.rotation_degrees = -90.0 * clampf(v * 1.6, -1.0, 1.0)
+			for f in followers:
+				f.position = body.position
+			if glow:
+				glow.scale = Vector2.ONE * (1.0 + 0.12 * sin(clock * 18.0))
+			var dir := signf(v)
+			if sparks and last_dir != 0.0 and dir != last_dir:
+				# Just touched a wall: burst of sparks bouncing back towards the middle.
+				sparks.position = body.position + Vector2(-dir * 22.0, 0)
+				sparks.direction = Vector2(dir, 0)
+				sparks.restart()
+			last_dir = dir
 
 
 func _update_fire(t: float) -> void:
