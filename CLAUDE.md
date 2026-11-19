@@ -31,9 +31,14 @@ or with a simulation script: `godot --headless --path . --script path/to/sim.gd`
 Always run the project headless after changing scripts, and tell the owner to press F5 to check visuals and feel.
 
 ## Workflow per milestone
-1. Implement and test.
-2. Update README.md (status table) and CREDITS.md if needed.
-3. `git add . && git commit -m "vX.Y: summary" && git tag vX.Y && git push --follow-tags`
+Never commit straight to `main`; every change goes through a branch and a Pull Request.
+1. Branch from an up-to-date main: `git switch main && git pull && git switch -c feature/vX.Y-short-name`
+2. Implement and test (headless run, then the owner checks with F5). Make small, focused commits.
+3. Update README.md (status table) and CREDITS.md if needed.
+4. Push and open a PR: `git push -u origin feature/vX.Y-short-name && gh pr create --base main --title "vX.Y: summary" --body "..."` (the body lists the changes and how they were tested).
+5. Merge after the owner reviews: `gh pr merge --merge --delete-branch`
+6. Tag on main (annotated, so `--follow-tags` pushes it): `git switch main && git pull && git tag -a vX.Y -m "vX.Y: summary" && git push --follow-tags`
+7. Publish the release: `gh release create vX.Y --title "vX.Y - summary" --notes "..."`
 
 ## Roadmap
 - v0.2: balance and feel tweaks from playtesting, dust and pop effects, character select, mute button
