@@ -1,10 +1,11 @@
 extends Node2D
-## Wall Hop - v0.2
+## Wall Hop - v0.3
 ## Tap to hop to the opposite wall. Dodge hazards, grab fruit, travel through zones.
 
 const Art := preload("res://scripts/art.gd")
 const Zones := preload("res://scripts/zones.gd")
 const Hazard := preload("res://scripts/hazard.gd")
+const Catalog := preload("res://scripts/catalog.gd")
 
 enum Mode { TITLE, PLAY, DEAD }
 
@@ -25,13 +26,17 @@ const PLAYER_R := 24.0
 const BASE_SPEED := 280.0
 const MAX_EXTRA_SPEED := 260.0
 const BREATHER := 450.0 # empty space after a zone change
-const FRUIT_POINTS := 5
 const MAX_COMBO := 5
 const SAVE_PATH := "user://wallhop.cfg"
 
-const FRUITS := ["apple", "bananas", "cherries", "kiwi", "melon", "orange", "pineapple", "strawberry"]
 const SFX_NAMES := ["jump", "wall_jump", "fruit", "hit", "click", "highscore"]
 const MUTE_RECT := Rect2(W - 100.0, 30.0, 80.0, 80.0)
+# Character picker on the title screen
+const PICK_Y := 1010.0
+const PREV_RECT := Rect2(110.0, PICK_Y - 60.0, 120.0, 120.0)
+const NEXT_RECT := Rect2(W - 230.0, PICK_Y - 60.0, 120.0, 120.0)
+const BUY_RECT := Rect2(W * 0.5 - 200.0, PICK_Y + 95.0, 400.0, 80.0)
+const TRAIL_EVERY := 0.03
 
 var mode: Mode = Mode.TITLE
 var flying := false
@@ -48,11 +53,17 @@ var bg_scroll := 0.0
 var since_row := 0.0
 var zone := 0
 var combo := 0
+var fruit_count := 0
 var fruit_points := 0
 var score := 0
 var best := 0
 var best_zone := 0
 var muted := false
+var wallet := 0 # fruit points to spend in the shop
+var owned: Array[String] = ["ninja_frog"]
+var selected := "ninja_frog"
+var preview_idx := 0
+var trail_timer := 0.0
 var shake := 0.0
 var dead_vel := 0.0
 var tap_lock_until := 0
@@ -71,6 +82,8 @@ var player: AnimatedSprite2D
 var saw_frames: SpriteFrames
 var collected_frames: SpriteFrames
 var fire_frames: SpriteFrames
+var fireball_frames: SpriteFrames
+var launcher_tex: AtlasTexture
 var fruit_frames := {}
 var spike_tex: Texture2D
 var saw_chain_tex: Texture2D
@@ -80,7 +93,9 @@ var dust_tex: Texture2D
 var bg_textures := {}
 
 var dim: ColorRect
+var hud: Control
 var score_label: Label
+var fruit_label: Label
 var combo_label: Label
 var title_label: Label
 var tap_label: Label
@@ -92,6 +107,12 @@ var banner_small: Label
 var banner_big: Label
 var mute_btn: TextureRect
 var mute_slash: ColorRect
+var picker: Control
+var preview: AnimatedSprite2D
+var char_name_label: Label
+var buy_label: Label
+var wallet_label: Label
+var earned_label: Label
 
 var sfx := {}
 var music: AudioStreamPlayer
@@ -125,7 +146,12 @@ func _build_art() -> void:
 		"warn": {"path": "res://assets/art/fire_warn.png", "w": 16, "h": 32, "fps": 16.0},
 		"on": {"path": "res://assets/art/fire_on.png", "w": 16, "h": 32, "fps": 14.0},
 	})
-	for f: String in FRUITS:
+	# Fireball: only the flame (top half) of the fire sprite. Launcher: only the block (bottom half).
+	fireball_frames = Art.build({"fly": {"path": "res://assets/art/fire_on.png", "w": 16, "h": 16, "fps": 14.0}})
+	launcher_tex = AtlasTexture.new()
+	launcher_tex.atlas = load("res://assets/art/fire_off.png")
+	launcher_tex.region = Rect2(0, 16, 16, 16)
+	for f: String in Catalog.FRUITS:
 		fruit_frames[f] = Art.build({"spin": {"path": "res://assets/art/fruit_%s.png" % f, "w": 32, "h": 32, "fps": 20.0}})
 	spike_tex = load("res://assets/art/spikes.png")
 	saw_chain_tex = load("res://assets/art/saw_chain.png")
@@ -170,12 +196,7 @@ func _build_background() -> void:
 
 func _build_player() -> void:
 	player = AnimatedSprite2D.new()
-	player.sprite_frames = Art.build({
-		"wall": {"path": "res://assets/art/frog_wall.png", "w": 32, "h": 32, "fps": 10.0},
-		"jump": {"path": "res://assets/art/frog_jump.png", "w": 32, "h": 32, "fps": 20.0},
-		"fall": {"path": "res://assets/art/frog_fall.png", "w": 32, "h": 32, "fps": 20.0},
-		"hit": {"path": "res://assets/art/frog_hit.png", "w": 32, "h": 32, "fps": 20.0, "loop": false},
-	})
+	player.sprite_frames = Catalog.character_frames(selected)
 	player.scale = Vector2(S, S)
 	add_child(player)
 
@@ -203,9 +224,10 @@ func _build_ui() -> void:
 	dim.size = Vector2(W, H)
 	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(dim)
-	score_label = _make_label(layer, "0", 88, 70.0)
-	combo_label = _make_label(layer, "", 40, 185.0)
-	combo_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+	_build_hud(layer)
+	_build_picker(layer)
+	earned_label = _make_label(layer, "", 36, 680.0)
+	earned_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
 	title_label = _make_label(layer, "WALL HOP", 110, 260.0)
 	tap_label = _make_label(layer, "TAP TO START", 56, 760.0)
 	best_label = _make_label(layer, "BEST 0", 48, 560.0)
@@ -235,6 +257,120 @@ func _build_ui() -> void:
 	var blink := create_tween().set_loops()
 	blink.tween_property(tap_label, "modulate:a", 0.25, 0.6)
 	blink.tween_property(tap_label, "modulate:a", 1.0, 0.6)
+
+
+## Top-left corner: score, fruit count and combo, so the middle stays clear for fruit.
+func _build_hud(layer: CanvasLayer) -> void:
+	hud = Control.new()
+	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(hud)
+	var panel := ColorRect.new()
+	panel.color = Color(0, 0, 0, 0.3)
+	panel.position = Vector2(16, 24)
+	panel.size = Vector2(230, 150)
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(panel)
+	score_label = _make_corner_label("0", 60, Vector2(32, 26))
+	var icon := TextureRect.new()
+	icon.texture = (fruit_frames["apple"] as SpriteFrames).get_frame_texture("spin", 0)
+	icon.scale = Vector2(1.5, 1.5)
+	icon.position = Vector2(26, 108)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(icon)
+	fruit_label = _make_corner_label("x 0", 36, Vector2(80, 112))
+	combo_label = _make_corner_label("", 34, Vector2(28, 182))
+	combo_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+
+
+## Title screen: preview of a character, arrows to browse, buy button, wallet.
+func _build_picker(layer: CanvasLayer) -> void:
+	picker = Control.new()
+	picker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(picker)
+	var holder := Node2D.new()
+	picker.add_child(holder)
+	preview = AnimatedSprite2D.new()
+	preview.scale = Vector2(4, 4)
+	preview.position = Vector2(W * 0.5, PICK_Y)
+	holder.add_child(preview)
+	for pair: Array in [["res://assets/art/btn_prev.png", PREV_RECT], ["res://assets/art/btn_next.png", NEXT_RECT]]:
+		var arrow := TextureRect.new()
+		arrow.texture = load(pair[0])
+		arrow.scale = Vector2(S, S)
+		var r: Rect2 = pair[1]
+		arrow.position = r.get_center() - Vector2(21, 22) * S * 0.5
+		arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		picker.add_child(arrow)
+	char_name_label = _make_label(picker, "", 40, PICK_Y + 55.0)
+	buy_label = _make_label(picker, "", 40, BUY_RECT.position.y + 14.0)
+	wallet_label = _make_label(picker, "", 32, BUY_RECT.end.y + 10.0)
+	wallet_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+
+
+func _refresh_picker() -> void:
+	var c: Dictionary = Catalog.CHARACTERS[preview_idx]
+	var id: String = c["id"]
+	preview.sprite_frames = Catalog.character_frames(id)
+	preview.play("idle")
+	char_name_label.text = c["name"]
+	if owned.has(id):
+		preview.modulate = Color.WHITE
+		buy_label.text = "SELECTED" if id == selected else "TAP TO SELECT"
+		buy_label.add_theme_color_override("font_color", Color(0.6, 1, 0.6))
+	else:
+		preview.modulate = Color(0.15, 0.15, 0.2)
+		var price := int(c["price"])
+		buy_label.text = ("BUY: %d" % price) if wallet >= price else ("NEED %d" % price)
+		buy_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3) if wallet >= price else Color(0.7, 0.7, 0.7))
+	wallet_label.text = "FRUIT POINTS: %d" % wallet
+
+
+func _browse(step: int) -> void:
+	preview_idx = posmod(preview_idx + step, Catalog.CHARACTERS.size())
+	var id: String = Catalog.CHARACTERS[preview_idx]["id"]
+	if owned.has(id):
+		_select_character(id)
+	_sfx("click")
+	_refresh_picker()
+
+
+func _select_character(id: String) -> void:
+	selected = id
+	player.sprite_frames = Catalog.character_frames(id)
+	player.play("wall")
+	_save()
+
+
+## Buys the character shown in the picker. Returns true on success.
+func try_buy(id: String) -> bool:
+	var price := int(Catalog.character(id)["price"])
+	if owned.has(id) or wallet < price:
+		return false
+	wallet -= price
+	owned.append(id)
+	_select_character(id)
+	return true
+
+
+func _on_buy_pressed() -> void:
+	var id: String = Catalog.CHARACTERS[preview_idx]["id"]
+	if owned.has(id):
+		_select_character(id)
+		_sfx("click")
+	elif try_buy(id):
+		_sfx("highscore")
+		shake = 6.0
+	else:
+		_sfx("hit")
+	_refresh_picker()
+
+
+func _make_corner_label(text: String, font_size: int, pos: Vector2) -> Label:
+	var l := _make_label(hud, text, font_size, pos.y)
+	l.position.x = pos.x
+	l.custom_minimum_size = Vector2(300, 0)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	return l
 
 
 func _build_audio() -> void:
@@ -288,6 +424,11 @@ func _load_save() -> void:
 		best = int(cfg.get_value("game", "best", 0))
 		best_zone = int(cfg.get_value("game", "best_zone", 0))
 		muted = bool(cfg.get_value("settings", "muted", false))
+		wallet = int(cfg.get_value("shop", "wallet", 0))
+		owned.assign(cfg.get_value("shop", "owned", ["ninja_frog"]))
+		selected = str(cfg.get_value("shop", "selected", "ninja_frog"))
+	if not owned.has(selected):
+		selected = "ninja_frog"
 
 
 func _save() -> void:
@@ -297,6 +438,9 @@ func _save() -> void:
 	cfg.set_value("game", "best", best)
 	cfg.set_value("game", "best_zone", best_zone)
 	cfg.set_value("settings", "muted", muted)
+	cfg.set_value("shop", "wallet", wallet)
+	cfg.set_value("shop", "owned", owned)
+	cfg.set_value("shop", "selected", selected)
 	cfg.save(SAVE_PATH)
 
 
@@ -310,8 +454,11 @@ func _show_title() -> void:
 	mode = Mode.TITLE
 	_reset_player()
 	_enter_zone(0, true)
-	score_label.visible = false
-	combo_label.visible = false
+	hud.visible = false
+	earned_label.visible = false
+	preview_idx = Catalog.character_index(selected)
+	_refresh_picker()
+	picker.visible = true
 	dim.visible = true
 	title_label.visible = true
 	tap_label.text = "TAP TO START"
@@ -335,6 +482,7 @@ func _start_game() -> void:
 	distance = 0.0
 	since_row = 0.0
 	combo = 0
+	fruit_count = 0
 	fruit_points = 0
 	score = 0
 	speed = BASE_SPEED
@@ -343,8 +491,11 @@ func _start_game() -> void:
 	_enter_zone(0, true)
 	mode = Mode.PLAY
 	score_label.text = "0"
-	score_label.visible = true
+	fruit_label.text = "0"
 	combo_label.visible = false
+	hud.visible = true
+	picker.visible = false
+	earned_label.visible = false
 	dim.visible = false
 	title_label.visible = false
 	tap_label.visible = false
@@ -422,6 +573,7 @@ func _die() -> void:
 	if is_best:
 		best = score
 	best_zone = maxi(best_zone, zone)
+	wallet += fruit_points
 	_save()
 	get_tree().create_timer(0.7).timeout.connect(_show_game_over.bind(is_best))
 
@@ -430,7 +582,7 @@ func _show_game_over(is_best: bool) -> void:
 	if mode != Mode.DEAD:
 		return
 	dim.visible = true
-	combo_label.visible = false
+	hud.visible = false
 	over_label.visible = true
 	result_label.text = "SCORE %d" % score
 	result_label.visible = true
@@ -439,7 +591,9 @@ func _show_game_over(is_best: bool) -> void:
 	best_label.visible = true
 	zone_label.text = "REACHED %s" % _zone_title(zone)
 	zone_label.visible = true
-	tap_label.text = "TAP TO RETRY"
+	earned_label.text = "+%d FRUIT POINTS  (TOTAL %d)" % [fruit_points, wallet]
+	earned_label.visible = true
+	tap_label.text = "TAP TO CONTINUE"
 	tap_label.position.y = 780.0
 	tap_label.visible = true
 	if is_best:
@@ -457,6 +611,9 @@ func _input(event: InputEvent) -> void:
 				_toggle_mute()
 				get_viewport().set_input_as_handled()
 				return
+			if mode == Mode.TITLE and _picker_click(mb.position):
+				get_viewport().set_input_as_handled()
+				return
 			pressed = true
 	elif event is InputEventKey:
 		var k := event as InputEventKey
@@ -464,9 +621,33 @@ func _input(event: InputEvent) -> void:
 			if k.keycode == KEY_M:
 				_toggle_mute()
 				return
+			if mode == Mode.TITLE:
+				match k.keycode:
+					KEY_LEFT:
+						_browse(-1)
+						return
+					KEY_RIGHT:
+						_browse(1)
+						return
+					KEY_B:
+						_on_buy_pressed()
+						return
 			pressed = k.keycode == KEY_SPACE or k.keycode == KEY_ENTER
 	if pressed:
 		_on_tap()
+
+
+## Handles taps on the title screen picker. Returns true if the tap was used.
+func _picker_click(pos: Vector2) -> bool:
+	if PREV_RECT.has_point(pos):
+		_browse(-1)
+	elif NEXT_RECT.has_point(pos):
+		_browse(1)
+	elif BUY_RECT.has_point(pos):
+		_on_buy_pressed()
+	else:
+		return false
+	return true
 
 
 func _on_tap() -> void:
@@ -481,9 +662,11 @@ func _on_tap() -> void:
 			else:
 				_begin_jump()
 		Mode.DEAD:
+			# Back to the title, where the character shop is; tap again to play.
 			if Time.get_ticks_msec() >= tap_lock_until:
 				tap_label.position.y = 760.0
-				_start_game()
+				_sfx("click")
+				_show_title()
 
 
 func _begin_jump() -> void:
@@ -494,7 +677,8 @@ func _begin_jump() -> void:
 	on_left = not on_left
 	fly_to = CLING_L if on_left else CLING_R
 	player.flip_h = on_left
-	player.play("jump")
+	player.play("spin")
+	trail_timer = 0.0
 	_sfx("jump")
 
 
@@ -563,8 +747,10 @@ func _update_play(delta: float) -> void:
 		var t := minf(fly_t, 1.0)
 		player.position.x = lerpf(fly_from, fly_to, t)
 		player.position.y = PLAYER_Y - sin(t * PI) * ARC
-		if t > 0.5 and player.animation != &"fall":
-			player.play("fall")
+		trail_timer -= delta
+		if trail_timer <= 0.0:
+			trail_timer = TRAIL_EVERY
+			_spawn_ghost()
 		if fly_t >= 1.0:
 			_land()
 
@@ -650,6 +836,17 @@ func _spawn_pattern(pattern: String, y: float) -> float:
 		"ball":
 			_spawn_ball(y - 230.0)
 			return 230.0
+		"fruit_trail":
+			# Staggered fruit down the middle: collect them by hopping back and forth.
+			var n := 5
+			var step := 160.0
+			var start_left := randf() < 0.5
+			for i in n:
+				var off := -70.0 if (i % 2 == 0) == start_left else 70.0
+				_spawn_fruit(Vector2(W * 0.5 + off, y - i * step))
+			return (n - 1) * step
+		"fireball":
+			_spawn_fireball(y)
 		"sky_fruit":
 			for i in 3:
 				_spawn_fruit(Vector2(W * 0.5 + (i - 1) * 90.0, y - absf(i - 1) * 30.0))
@@ -753,9 +950,34 @@ func _spawn_ball(y: float) -> void:
 	h.tick(0.0, 0.0)
 
 
+## A fireball bouncing wall to wall between two launchers. It can hit a player
+## holding either wall, but only one wall at a time.
+func _spawn_fireball(y: float) -> void:
+	var h := _make_hazard("fireball", Vector2(W * 0.5, y), 20.0)
+	h.motion = Hazard.Motion.SHOOT
+	h.amp = W * 0.5 - WALL_W - 24.0
+	h.period = randf_range(0.95, 1.25)
+	h.phase = randf() * h.period * 2.0
+	for left: bool in [true, false]:
+		var base := Sprite2D.new()
+		base.texture = launcher_tex
+		base.scale = Vector2(S, S)
+		base.rotation_degrees = 90.0 if left else -90.0
+		base.position = Vector2((-1.0 if left else 1.0) * (W * 0.5 - WALL_W - 12.0), 0)
+		h.add_child(base)
+	var ball := AnimatedSprite2D.new()
+	ball.sprite_frames = fireball_frames
+	ball.scale = Vector2(S, S)
+	ball.play("fly")
+	h.add_child(ball)
+	h.body = ball
+	h.tick(0.0, 0.0)
+
+
 func _spawn_fruit(pos: Vector2) -> void:
-	var key: String = FRUITS.pick_random()
+	var key := Catalog.pick_fruit()
 	var h := _make_hazard("fruit", pos, 34.0)
+	h.value = int(Catalog.FRUITS[key]["points"])
 	var f := AnimatedSprite2D.new()
 	f.sprite_frames = fruit_frames[key]
 	f.scale = Vector2(2.5, 2.5)
@@ -767,8 +989,10 @@ func _spawn_fruit(pos: Vector2) -> void:
 
 func _collect(fruit: Hazard) -> void:
 	combo = mini(combo + 1, MAX_COMBO)
-	var pts := FRUIT_POINTS * combo
+	fruit_count += 1
+	var pts := fruit.value * combo
 	fruit_points += pts
+	fruit_label.text = str(fruit_points)
 	_sfx("fruit")
 	var pop := AnimatedSprite2D.new()
 	pop.sprite_frames = collected_frames
@@ -807,6 +1031,22 @@ func _float_text(text: String, pos: Vector2) -> void:
 	tw.tween_property(l, "position:y", -130.0, 0.6)
 	tw.tween_property(l, "modulate:a", 0.0, 0.6).set_delay(0.2)
 	tw.chain().tween_callback(holder.queue_free)
+
+
+## Afterimage of the player while hopping, tinted with the character's colour.
+func _spawn_ghost() -> void:
+	var g := Sprite2D.new()
+	g.texture = player.sprite_frames.get_frame_texture(player.animation, player.frame)
+	g.flip_h = player.flip_h
+	g.scale = player.scale
+	g.position = player.position
+	var trail: Color = Catalog.character(selected)["trail"]
+	g.modulate = Color(trail, 0.55)
+	fx.add_child(g)
+	var tw := g.create_tween().set_parallel()
+	tw.tween_property(g, "modulate:a", 0.0, 0.22)
+	tw.tween_property(g, "scale", player.scale * 0.8, 0.22)
+	tw.chain().tween_callback(g.queue_free)
 
 
 func _spawn_dust() -> void:

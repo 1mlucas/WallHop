@@ -11,7 +11,7 @@ const LIST: Array[Dictionary] = [
 		"bg": "res://assets/art/bg_blue.png",
 		"bg_tint": Color(1, 1, 1),
 		"wall_tint": Color(1, 1, 1),
-		"patterns": {"saw": 3, "spikes": 3, "fruit": 3},
+		"patterns": {"saw": 3, "spikes": 3, "fruit": 2, "fruit_trail": 2},
 	},
 	{
 		"name": "SAW MILL",
@@ -19,7 +19,7 @@ const LIST: Array[Dictionary] = [
 		"bg": "res://assets/art/bg_green.png",
 		"bg_tint": Color(1, 1, 1),
 		"wall_tint": Color(0.85, 0.95, 0.85),
-		"patterns": {"saw": 2, "spikes": 1, "fruit": 2, "saw_slide": 4, "zigzag": 2},
+		"patterns": {"saw": 2, "spikes": 1, "fruit": 1, "fruit_trail": 2, "saw_slide": 4, "zigzag": 2},
 	},
 	{
 		"name": "HOT FORGE",
@@ -27,7 +27,7 @@ const LIST: Array[Dictionary] = [
 		"bg": "res://assets/art/bg_brown.png",
 		"bg_tint": Color(1, 0.9, 0.85),
 		"wall_tint": Color(1, 0.8, 0.7),
-		"patterns": {"spikes": 2, "fruit": 1, "saw_slide": 1, "fire": 3, "fire_dual": 3},
+		"patterns": {"spikes": 1, "fruit": 1, "fruit_trail": 1, "saw_slide": 1, "fire": 2, "fire_dual": 2, "fireball": 4},
 	},
 	{
 		"name": "SKY GARDEN",
@@ -35,7 +35,7 @@ const LIST: Array[Dictionary] = [
 		"bg": "res://assets/art/bg_purple.png",
 		"bg_tint": Color(1, 1, 1),
 		"wall_tint": Color(0.9, 0.85, 1),
-		"patterns": {"saw": 1, "fruit": 1, "zigzag": 2, "saw_slide": 1, "ball": 4, "sky_fruit": 2},
+		"patterns": {"saw": 1, "fruit_trail": 2, "zigzag": 2, "saw_slide": 1, "ball": 4, "sky_fruit": 1, "fireball": 2},
 	},
 	{
 		"name": "NIGHT TOWER",
@@ -43,7 +43,7 @@ const LIST: Array[Dictionary] = [
 		"bg": "res://assets/art/bg_gray.png",
 		"bg_tint": Color(0.55, 0.6, 0.8),
 		"wall_tint": Color(0.6, 0.65, 0.85),
-		"patterns": {"saw": 1, "spikes": 1, "fruit": 1, "saw_slide": 2, "zigzag": 2, "fire": 1, "fire_dual": 2, "ball": 2, "sky_fruit": 1},
+		"patterns": {"saw": 1, "spikes": 1, "fruit": 1, "saw_slide": 2, "zigzag": 2, "fire": 1, "fire_dual": 2, "ball": 2, "sky_fruit": 1, "fruit_trail": 1, "fireball": 3},
 	},
 ]
 
