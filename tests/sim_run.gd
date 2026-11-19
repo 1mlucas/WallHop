@@ -115,6 +115,36 @@ func _test_shop() -> void:
 	main.call("_select_character", "ninja_frog")
 
 
+## Random middle fruit trails: inside the lane, out of reach from the walls,
+## neighbours spread apart, and not the same layout every time.
+func _test_fruit_trail() -> void:
+	var world: Node2D = main.get("world")
+	var reach: float = 34.0 + main.PLAYER_R
+	var xs_seen := {}
+	for t in 200:
+		for c in world.get_children():
+			world.remove_child(c)
+			c.free()
+		main.call("_spawn_pattern", "fruit_trail", -100.0)
+		var fruit: Array[Hazard] = []
+		for c in world.get_children():
+			fruit.append(c as Hazard)
+		_check(fruit.size() >= 4 and fruit.size() <= 6, "trail should have 4-6 fruit, got %d" % fruit.size())
+		for i in fruit.size():
+			var x := fruit[i].position.x
+			xs_seen[int(x / 20.0)] = true
+			_check(x - main.CLING_L > reach and main.CLING_R - x > reach, "trail fruit at x=%.0f can be eaten from a wall" % x)
+			if i > 0:
+				var dx := absf(x - fruit[i - 1].position.x)
+				var dy := fruit[i - 1].position.y - fruit[i].position.y
+				_check(dx >= main.TRAIL_MIN_STEP_X - 0.01, "trail neighbours only %.0f px apart" % dx)
+				_check(dy >= 120.0 and dy <= 220.0, "trail vertical gap %.0f out of range" % dy)
+	_check(xs_seen.size() >= 10, "trail x positions look fixed, only %d buckets used" % xs_seen.size())
+	for c in world.get_children():
+		world.remove_child(c)
+		c.free()
+
+
 # ---------------------------------------------------------------- simulation
 
 func _start_run() -> void:
@@ -124,6 +154,7 @@ func _start_run() -> void:
 	main.set("god_mode", true)
 	if run == 0:
 		_test_shop()
+		_test_fruit_trail()
 	seed(1000 + run)
 	main.call("_on_tap") # start the game
 	step = 0
