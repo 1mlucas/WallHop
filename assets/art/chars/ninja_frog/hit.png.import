@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://53igrxnsytxi"
-path="res://.godot/imported/frog_jump.png-25fc0d08dd33a28d72b7939c226c0306.ctex"
+uid="uid://ro8rt2ll5flx"
+path="res://.godot/imported/hit.png-be287434ff17d4eeb17c8219fc7af973.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/frog_jump.png"
-dest_files=["res://.godot/imported/frog_jump.png-25fc0d08dd33a28d72b7939c226c0306.ctex"]
+source_file="res://assets/art/chars/ninja_frog/hit.png"
+dest_files=["res://.godot/imported/hit.png-be287434ff17d4eeb17c8219fc7af973.ctex"]
 
 [params]
 

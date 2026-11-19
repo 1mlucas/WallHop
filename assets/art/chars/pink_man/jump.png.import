@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dqqvhwsd5gm3w"
-path="res://.godot/imported/frog_hit.png-3b41e900f7e8e78c504e61e8c9a79b78.ctex"
+uid="uid://dn0kdiu527nda"
+path="res://.godot/imported/jump.png-faf20a9810607c1418afb9c4d0e87939.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/frog_hit.png"
-dest_files=["res://.godot/imported/frog_hit.png-3b41e900f7e8e78c504e61e8c9a79b78.ctex"]
+source_file="res://assets/art/chars/pink_man/jump.png"
+dest_files=["res://.godot/imported/jump.png-faf20a9810607c1418afb9c4d0e87939.ctex"]
 
 [params]
 

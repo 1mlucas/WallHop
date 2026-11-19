@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://byjpyxo8sto3v"
-path="res://.godot/imported/frog_wall.png-c4441cac7a5f9e7460696ea62b37f9fe.ctex"
+uid="uid://blchmxkaj0c03"
+path="res://.godot/imported/spin.png-d6567a894ce0df28f2e4626914d1d942.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/frog_wall.png"
-dest_files=["res://.godot/imported/frog_wall.png-c4441cac7a5f9e7460696ea62b37f9fe.ctex"]
+source_file="res://assets/art/chars/virtual_guy/spin.png"
+dest_files=["res://.godot/imported/spin.png-d6567a894ce0df28f2e4626914d1d942.ctex"]
 
 [params]
 
