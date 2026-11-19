@@ -10,7 +10,7 @@ Tap to hop to the opposite wall. Climb through five zones, dodge saws, spikes, f
 |---------|--------------|
 | v0.1 | Playable core: wall hop, saws, spikes, fruit, score, best score, game over and retry, music and SFX |
 | v0.2 | Five zones (Meadow, Saw Mill, Hot Forge, Sky Garden, Night Tower) with sliding saws, fire jets, swinging spiked balls; fruit combo; landing dust; mute button; headless simulation test |
-| v0.3 | Fruit trails down the middle, bouncing fireballs, score in the corner, fruit worth different points, character shop (4 characters, each with its own hop trail) |
+| v0.3 | Icon-based title and game over screens, random fruit trails down the middle, smooth fireballs with glow and ember trail, score in the corner, fruit worth different points, character shop (4 characters, each with its own hop trail) |
 
 Planned: pause, full-screen iPhone layout, power-ups, missions, more zones, iOS release. See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md).
 
