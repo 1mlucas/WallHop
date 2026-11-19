@@ -11,8 +11,10 @@ config_version=5
 [application]
 
 config/name="Wall Hop"
+config/version="0.1.0"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
+config/icon="uid://wdlkxd51dpdx"
 
 [display]
 
@@ -27,3 +29,4 @@ window/handheld/orientation=1
 
 textures/canvas_textures/default_texture_filter=0
 renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true

@@ -2,7 +2,7 @@
 
 ## Project
 One-tap pixel-art mobile game (portrait 720x1280, iOS first) built with Godot 4.x and GDScript.
-Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.2.
+Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.3.
 
 ## About the owner
 - Not a game developer. QA/automation engineer (Java, Python) who wants Claude to write the code.
@@ -14,10 +14,11 @@ Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current v
 - `scripts/main.gd` - game flow, player, spawning, collisions, UI (everything is built in code)
 - `scripts/zones.gd` - zone table (looks, start distance, pattern weights)
 - `scripts/hazard.gd` - scrolling hazard/fruit node: motion, hit capsule
+- `scripts/catalog.gd` - characters (shop prices, trail colours) and fruit values
 - `scripts/art.gd` - sprite sheet to SpriteFrames helper
 - `tests/sim_run.gd` - headless simulation + fairness test (must pass before a PR)
 - `docs/GAME_DESIGN.md` - design doc: zones, fairness rules, ideas, roadmap
-- `assets/art/` - Pixel Adventure 1 sprites (Pixel Frog, CC0)
+- `assets/art/` - Pixel Adventure 1 sprites (Pixel Frog, CC0); `assets/art/chars/<id>/` holds one folder per character
 - `assets/audio/sfx`, `assets/audio/music` - OGG files (Juhani Junkala, CC0)
 - `Licenses/`, `CREDITS.md` - keep updated whenever an asset is added
 
@@ -46,5 +47,5 @@ Never commit straight to `main`; every change goes through a branch and a Pull R
 
 ## Roadmap
 See `docs/GAME_DESIGN.md` for the full roadmap.
-- v0.3: character select, balance from playtesting, pause
+- next: pause, full-screen iPhone layout (safe area), balance from playtesting
 - later: more hazards, settings, iOS export (Xcode + Apple Developer account), ads/IAP plugins
