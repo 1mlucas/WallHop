@@ -145,6 +145,51 @@ func _test_fruit_trail() -> void:
 		c.free()
 
 
+## Continue after game over: price per use, limit, wallet, no double banking, protection.
+func _test_continue() -> void:
+	main.set("save_enabled", false)
+	main.set("god_mode", false)
+	main.call("_start_game")
+	var costs: Array[int] = main.CONTINUE_COSTS
+	main.set("wallet", 0)
+	main.set("fruit_points", 50)
+	main.call("_die")
+	_check(int(main.get("wallet")) == 50, "dying should bank the run's fruit points")
+	_check(int(main.call("continue_cost")) == costs[0], "first continue should cost %d" % costs[0])
+	_check(not main.call("try_continue"), "continue without enough points must fail")
+	_check(int(main.get("mode")) == main.Mode.DEAD, "failed continue must keep the game over")
+
+	main.set("wallet", costs[0] + 20)
+	_check(main.call("try_continue"), "continue with enough points must work")
+	_check(int(main.get("wallet")) == 20, "continue must take exactly its price")
+	_check(int(main.get("mode")) == main.Mode.PLAY, "continue must resume the run")
+	_check(float(main.get("invuln")) > 0.0, "continue must give a short protection")
+	var world: Node2D = main.get("world")
+	for c in world.get_children():
+		_check(c.is_queued_for_deletion(), "continue must clear the hazards on screen")
+		break
+
+	main.set("fruit_points", 80)
+	main.call("_die")
+	_check(int(main.get("wallet")) == 50, "second death must bank only the new 30 points, wallet is %d" % int(main.get("wallet")))
+	_check(int(main.call("continue_cost")) == costs[1], "second continue should cost %d" % costs[1])
+	main.set("wallet", costs[1])
+	_check(main.call("try_continue"), "second continue must work")
+	main.call("_update_invuln", 10.0)
+	_check(float(main.get("invuln")) == 0.0 and (main.get("player") as Node2D).modulate.a == 1.0, "protection must end and the player stop blinking")
+
+	main.call("_die")
+	_check(int(main.call("continue_cost")) == -1, "no continue after the limit")
+	main.set("wallet", 99999)
+	_check(not main.call("try_continue"), "continue past the limit must fail")
+
+	main.call("_start_game")
+	_check(int(main.get("continues_used")) == 0 and int(main.get("banked")) == 0, "a new run must reset continues")
+	main.set("wallet", 0)
+	main.set("god_mode", true)
+	main.call("_show_title")
+
+
 # ---------------------------------------------------------------- simulation
 
 func _start_run() -> void:
@@ -155,6 +200,7 @@ func _start_run() -> void:
 	if run == 0:
 		_test_shop()
 		_test_fruit_trail()
+		_test_continue()
 	seed(1000 + run)
 	main.call("_on_tap") # start the game
 	step = 0
