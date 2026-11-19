@@ -1,0 +1,14 @@
+# Credits
+
+All third-party assets used in this project are released under **CC0 (public domain)**. Attribution is not required, but credit is given here.
+
+## Art
+- **Pixel Adventure 1** by Pixel Frog - <https://pixelfrog-assets.itch.io/pixel-adventure-1> (CC0)
+
+## Music
+- **5 Action Chiptunes** by Juhani Junkala (CC0) - tracks used: "Title Screen", "Level 1"
+
+## Sound effects
+- **The Essential Retro Video Game Sound Effects Collection [512 sounds]** by Juhani Junkala (CC0)
+
+Original license notes from the authors are kept in the `Licenses/` folder.

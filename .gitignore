@@ -1,0 +1,31 @@
+# Godot 4
+.godot/
+*.translation
+export.cfg
+export_credentials.cfg
+
+# iOS / Xcode export output
+build/
+*.xcodeproj/xcuserdata/
+xcuserdata/
+DerivedData/
+*.ipa
+*.xcarchive
+
+# Apple signing - NEVER commit
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+AuthKey_*.p8
+
+# Editors / IDEs
+.vscode/
+.idea/
+.cursor/
+*.code-workspace
+
+# OS / misc
+.DS_Store
+*.zip
+*.tmp
