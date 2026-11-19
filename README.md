@@ -1,8 +1,40 @@
+<div align="center">
+
+<img src="assets/icon/icon_1024.png" width="120" alt="Wall Hop icon">
+
 # Wall Hop
 
-A one-tap pixel-art arcade game for iOS, built with **Godot 4** (GDScript).
+**A one-tap pixel-art arcade game for iOS, built with Godot 4.**
+
+![Godot](https://img.shields.io/badge/Godot-4.x-478CBF?logo=godotengine&logoColor=white)
+![GDScript](https://img.shields.io/badge/GDScript-100%25-355570)
+![Platform](https://img.shields.io/badge/platform-iOS-black?logo=apple&logoColor=white)
+![Orientation](https://img.shields.io/badge/orientation-portrait-blue)
+![Assets](https://img.shields.io/badge/assets-CC0-brightgreen)
+![Status](https://img.shields.io/badge/status-in%20development-orange)
+
+</div>
 
 Tap to hop to the opposite wall. Climb through five zones, dodge saws, spikes, fire and swinging spiked balls, chain fruit combos, beat your best score.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/media/screenshot_title.png" width="220" alt="Title screen"><br><sub>Title and character shop</sub></td>
+    <td align="center"><img src="docs/media/screenshot_gameplay.png" width="220" alt="Gameplay"><br><sub>Hopping between walls</sub></td>
+    <td align="center"><img src="docs/media/screenshot_gameover.png" width="220" alt="Game over"><br><sub>Game over and continue</sub></td>
+  </tr>
+</table>
+
+## Features
+
+- 🐸 **One-tap controls**: a single tap flips you to the other wall, with a tap buffer for tight timing
+- 🗺️ **Five zones**: Meadow, Saw Mill, Hot Forge, Sky Garden, Night Tower, each with its own hazards
+- 🍎 **Fruit combos** and a shop with 4 characters, each with its own hop trail
+- ♿ **Comfort options**: reduced-motion mode, calm background, break reminder
+- 🧪 **Headless fairness test** that checks both walls are never deadly at once
+- 🎵 CC0 chiptune music and sound effects
 
 ## Status
 
@@ -35,18 +67,29 @@ Exit code 0 means pass.
 
 ## Project layout
 
-```
-scenes/main.tscn     entry scene (just holds the script)
-scripts/main.gd      game flow, player, spawning, collisions, UI
-scripts/zones.gd     zone table: names, looks, hazard pattern weights
-scripts/hazard.gd    scrolling hazard / fruit with motion and hit shape
-scripts/catalog.gd   characters (prices, trail colours) and fruit values
-scripts/art.gd       sprite-sheet to SpriteFrames helper
-tests/sim_run.gd     headless simulation and fairness test
-docs/GAME_DESIGN.md  zones, rules, ideas and roadmap
-assets/art/          Pixel Adventure 1 sprites
-assets/audio/        OGG music and sound effects
-Licenses/            license info for third-party assets
+```text
+🐸 WallHop
+├── 🎬 scenes
+│   └── main.tscn            entry scene (just holds the script)
+├── 📜 scripts
+│   ├── main.gd              game flow, player, spawning, collisions, UI
+│   ├── zones.gd             zone table: names, looks, hazard pattern weights
+│   ├── hazard.gd            scrolling hazard / fruit with motion and hit shape
+│   ├── catalog.gd           characters (prices, trail colours) and fruit values
+│   └── art.gd               sprite-sheet to SpriteFrames helper
+├── 🧪 tests
+│   └── sim_run.gd           headless simulation and fairness test
+├── 📖 docs
+│   └── GAME_DESIGN.md       zones, rules, ideas and roadmap
+├── 🎨 assets
+│   ├── art                  Pixel Adventure 1 and 2 sprites (CC0)
+│   │   ├── chars            playable characters
+│   │   └── enemies          20 enemy sprite sets
+│   ├── audio                OGG music and sound effects
+│   └── icon                 app icon
+├── ⚖️ Licenses              license info for third-party assets
+├── 🙌 CREDITS.md            asset credits
+└── ⚙️ project.godot         Godot 4 project settings
 ```
 
 ## Credits
