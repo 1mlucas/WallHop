@@ -2,7 +2,7 @@
 
 ## Project
 One-tap pixel-art mobile game (portrait 720x1280, iOS first) built with Godot 4.x and GDScript.
-Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.3.
+Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.3.1.
 
 ## About the owner
 - Not a game developer. QA/automation engineer (Java, Python) who wants Claude to write the code.
@@ -25,6 +25,7 @@ Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current v
 ## Conventions
 - GDScript with static typing, tabs for indentation, constants in UPPER_CASE.
 - Pixel art: nearest-neighbour filtering (set in project.godot), drawn at 3x scale.
+- Comfort first (players reported motion sickness): no screen shake, no background scrolling, nothing flashing faster than 3 times per second, eased motion, and every new moving effect must respect `reduced_motion`. See "Comfort rules" in docs/GAME_DESIGN.md.
 - Keep new assets CC0 or paid-with-license only. Avoid CC-BY-SA / CC-BY-ND. Record the source in CREDITS.md.
 - Audio is converted to OGG before being added (small iOS build).
 - Do not commit: `.godot/`, build output, Apple certificates or provisioning profiles, zip archives.
