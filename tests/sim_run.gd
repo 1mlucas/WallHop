@@ -6,6 +6,7 @@ extends SceneTree
 
 const Zones := preload("res://scripts/zones.gd")
 const Hazard := preload("res://scripts/hazard.gd")
+const Catalog := preload("res://scripts/catalog.gd")
 
 const DT := 1.0 / 60.0
 const RUNS := 3
@@ -22,10 +23,13 @@ var kinds_seen := {}
 var motions_seen := {}
 var unfair_frames := 0
 var ball_on_wall_frames := 0
+var fireball_out_frames := 0
+var center_fruit_ids := {}
 
 
 func _initialize() -> void:
 	_test_zone_table()
+	_test_catalog()
 
 
 func _process(_delta: float) -> bool:
@@ -68,6 +72,49 @@ func _test_zone_table() -> void:
 	_check(Zones.index_at(100000.0) == Zones.LIST.size() - 1, "far distance should be the last zone")
 
 
+func _test_catalog() -> void:
+	var chars := Catalog.CHARACTERS
+	_check(int(chars[0]["price"]) == 0, "first character must be free")
+	for i in chars.size():
+		var id: String = chars[i]["id"]
+		if i > 0:
+			_check(int(chars[i]["price"]) > int(chars[i - 1]["price"]), "%s should cost more than the previous one" % id)
+		for anim: String in ["wall", "jump", "fall", "spin", "idle", "hit"]:
+			var path := "res://assets/art/chars/%s/%s.png" % [id, anim]
+			_check(ResourceLoader.exists(path), "missing sprite " + path)
+	# Rarer fruit is worth more: sorted by points, weights never go up.
+	var fruits: Array = Catalog.FRUITS.keys()
+	fruits.sort_custom(func(a: String, b: String) -> bool:
+		return int(Catalog.FRUITS[a]["points"]) < int(Catalog.FRUITS[b]["points"]))
+	for i in range(1, fruits.size()):
+		var lo: Dictionary = Catalog.FRUITS[fruits[i - 1]]
+		var hi: Dictionary = Catalog.FRUITS[fruits[i]]
+		_check(int(hi["weight"]) <= int(lo["weight"]), "%s is worth more than %s but spawns more often" % [fruits[i], fruits[i - 1]])
+	var seen := {}
+	for _n in 2000:
+		seen[Catalog.pick_fruit()] = true
+	_check(seen.size() == Catalog.FRUITS.size(), "pick_fruit never picked some fruit: %s" % str(seen.keys()))
+
+
+## Shop rules, run once on a fresh main scene (god_mode: nothing is saved).
+func _test_shop() -> void:
+	var id: String = Catalog.CHARACTERS[1]["id"]
+	var price := int(Catalog.CHARACTERS[1]["price"])
+	main.set("owned", ["ninja_frog"] as Array[String])
+	main.set("wallet", price - 1)
+	_check(not main.call("try_buy", id), "buying with too few points must fail")
+	_check(int(main.get("wallet")) == price - 1, "failed buy must not change the wallet")
+	main.set("wallet", price + 7)
+	_check(main.call("try_buy", id), "buying with enough points must work")
+	_check(int(main.get("wallet")) == 7, "buy must take exactly the price")
+	_check((main.get("owned") as Array).has(id), "bought character must be owned")
+	_check(main.get("selected") == id, "bought character must be selected")
+	_check(not main.call("try_buy", id), "buying an owned character must fail")
+	_check(int(main.get("wallet")) == 7, "second buy must not take points")
+	main.set("wallet", 0)
+	main.call("_select_character", "ninja_frog")
+
+
 # ---------------------------------------------------------------- simulation
 
 func _start_run() -> void:
@@ -75,6 +122,8 @@ func _start_run() -> void:
 	root.add_child(main)
 	main.set_process(false)
 	main.set("god_mode", true)
+	if run == 0:
+		_test_shop()
 	seed(1000 + run)
 	main.call("_on_tap") # start the game
 	step = 0
@@ -84,6 +133,8 @@ func _start_run() -> void:
 	motions_seen = {}
 	unfair_frames = 0
 	ball_on_wall_frames = 0
+	fireball_out_frames = 0
+	center_fruit_ids = {}
 
 
 func _step() -> void:
@@ -111,18 +162,27 @@ func _step() -> void:
 			var on_r := h.touches(Vector2(main.CLING_R, main.PLAYER_Y), main.PLAYER_R)
 			if on_l or on_r:
 				ball_on_wall_frames += 1
+		elif h.kind == "fireball":
+			var x := h.hit_center().x
+			if x < main.WALL_W or x > main.W - main.WALL_W:
+				fireball_out_frames += 1
+		elif h.kind == "fruit" and absf(h.position.x - main.W * 0.5) < 100.0:
+			center_fruit_ids[h.get_instance_id()] = true
 
 
 func _end_run() -> void:
 	var meters: float = main.call("meters")
-	print("run %d: %.0f m, zones %s, kinds %s, bot hits %d" % [
-		run, meters, str(zones_seen.keys()), str(kinds_seen.keys()), int(main.get("god_hits"))])
+	var center_fruit := center_fruit_ids.size()
+	print("run %d: %.0f m, zones %s, kinds %s, center fruit %d, bot hits %d" % [
+		run, meters, str(zones_seen.keys()), str(kinds_seen.keys()), center_fruit, int(main.get("god_hits"))])
 	_check(zones_seen.size() == Zones.LIST.size(), "run %d reached only zones %s" % [run, str(zones_seen.keys())])
-	for k: String in ["saw", "spike", "fire", "ball", "fruit"]:
+	for k: String in ["saw", "spike", "fire", "ball", "fruit", "fireball"]:
 		_check(kinds_seen.has(k), "run %d never spawned %s" % [run, k])
-	for m: int in [Hazard.Motion.SLIDE, Hazard.Motion.SWING, Hazard.Motion.FIRE]:
+	for m: int in [Hazard.Motion.SLIDE, Hazard.Motion.SWING, Hazard.Motion.FIRE, Hazard.Motion.SHOOT]:
 		_check(motions_seen.has(m), "run %d never used motion %d" % [run, m])
 	_check(unfair_frames == 0, "run %d: both walls deadly at once in %d frames" % [run, unfair_frames])
+	_check(fireball_out_frames == 0, "run %d: fireball left the shaft in %d frames" % [run, fireball_out_frames])
+	_check(center_fruit >= 20, "run %d: only %d fruit spawned in the middle" % [run, center_fruit])
 	_check(ball_on_wall_frames == 0, "run %d: swinging ball reached a wall in %d frames" % [run, ball_on_wall_frames])
 	main.free()
 
