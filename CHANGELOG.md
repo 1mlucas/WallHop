@@ -5,8 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (pre-1.0: minor = milestone, patch = fixes and polish).
 
 ## [Unreleased]
+
+## [0.4.1] - 2026-11-20
 ### Added
+- **Double tap**: a second tap early in a hop makes a high hop (rises 190 px, lands a little later). Once per hop; a late second tap still queues the next hop.
+- A high hop reaches perches 150 px further up.
+- **Fruit towers**: 4 fruit stacked in the middle; a plain hop gets at most 2, a double tap in the middle gets them all.
+- Perch **landing ghost**: a faint copy of the character on the perch the next hop would land on.
+- Perch **timer dots**: three dots under the propeller go out one by one and turn orange near the end (no blinking).
+- Perch **landing press**: the plank dips and springs back (off with reduced motion).
+- Sounds for the high hop, landing on a perch and the propeller stopping (Kenney, CC0).
 - This changelog.
+
+### Changed
+- Perch hold time and reach depend on the zone: 2.5 s in Meadow down to 1.5 s in Night Tower.
+- Perches are spaced 1500 px apart (was 1300) to fit the longer hold in Meadow.
+- `tests/run_tests.sh` also prints the fruit tower timing summary.
 
 ## [0.4] - 2026-11-20
 ### Added
@@ -80,7 +94,8 @@ Comfort pass after playtesters reported dizziness, headaches, eye strain and nau
 - Score and saved best score, game over and retry.
 - Music and sound effects.
 
-[Unreleased]: https://github.com/1mlucas/WallHop/compare/v0.4...HEAD
+[Unreleased]: https://github.com/1mlucas/WallHop/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/1mlucas/WallHop/compare/v0.4...v0.4.1
 [0.4]: https://github.com/1mlucas/WallHop/compare/v0.3.1...v0.4
 [0.3.1]: https://github.com/1mlucas/WallHop/compare/v0.3...v0.3.1
 [0.3]: https://github.com/1mlucas/WallHop/compare/v0.2...v0.3

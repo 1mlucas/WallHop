@@ -55,6 +55,34 @@ Hovering lifts (Pixel Adventure 1 "Falling Platform") in the middle of the shaft
 | Meadow | still, sliding, sinking |
 | Saw Mill onwards | with saws, sliding, sinking, elevator |
 
+### Perch feedback (v0.4.1)
+- **Landing ghost**: while the player holds a wall and a perch is in reach, a faint
+  copy of the character stands on it, showing where the next hop lands.
+- **Timer dots**: three small dots under the propeller; one goes out per third of
+  the hold, and they turn orange in the last 0.8 s. Only 3 changes, no blinking.
+- **Landing press**: the plank dips about 8 px and springs back (off with reduced motion).
+- **Sounds**: a soft thud on landing, a falling tone when the propeller stops.
+- **Per zone**: hold time and how far up a hop still reaches a perch.
+
+| Zone | Hold | Reach |
+|------|------|-------|
+| Meadow | 2.5 s | 260 px |
+| Saw Mill | 2.0 s | 220 px |
+| Hot Forge | 2.0 s | 220 px |
+| Sky Garden | 1.8 s | 220 px |
+| Night Tower | 1.5 s | 200 px |
+
+## Double tap: high hop (v0.4.1)
+A single tap still hops at once (no waiting to see if a second tap comes).
+- A **second tap in the first 65% of a hop** turns it into a high hop: the hop
+  restarts from where the player is, rises 190 px (140 with reduced motion) and
+  takes 0.46 s more, eased like any hop. Once per hop.
+- A later second tap queues the next hop, as before.
+- Uses: land later so a saw on the target wall can pass first; reach a perch up to
+  150 px further up; shoot up through a **fruit tower** (4 fruit stacked in the
+  middle). A plain hop gets at most 2 of the tower, a double tap in the middle all 4.
+- Never required: every pattern can be survived with single taps.
+
 ## Fruit layouts (v0.4, `scripts/fruit_layout.gd`)
 Fruit should look hand-placed but differ every run:
 - **Scatter** (`fruit_trail`): random walk up the middle, each fruit 120-220 px higher
@@ -167,6 +195,7 @@ Ideas that use sprites already in Pixel Adventure 1 (CC0):
 | v0.3 | Middle fruit trails, bouncing fireballs, corner HUD, fruit values, character shop with hop trails |
 | v0.3.1 | Comfort pass against motion sickness and eye strain (see Comfort rules) |
 | v0.4 | Perches in the middle (still, sliding, sinking, elevator), natural fruit layouts, fixed fruit values (no combo) |
+| v0.4.1 | Double tap high hop, fruit towers, perch landing ghost, timer dots, landing press, sounds, hold time per zone |
 | next | Fruit bandits (Pixel Adventure 2 enemies), double tap for a higher hop, pause, safe area |
 | later | Power-ups and missions, new zones (Ice Cave, Crusher Hall), settings screen |
 | v1.0 | iOS export, TestFlight, App Store |

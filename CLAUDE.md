@@ -2,7 +2,7 @@
 
 ## Project
 One-tap pixel-art mobile game (portrait 720x1280, iOS first) built with Godot 4.x and GDScript.
-Tap to hop to the opposite wall (or onto a perch in the middle), dodge saws and spikes, collect fruit. Current version: v0.4.
+Tap to hop to the opposite wall (or onto a perch in the middle; double tap for a high hop), dodge saws and spikes, collect fruit. Current version: v0.4.1.
 
 ## About the owner
 - Not a game developer. QA/automation engineer (Java, Python) who wants Claude to write the code.
@@ -50,5 +50,5 @@ Never commit straight to `main`; every change goes through a branch and a Pull R
 
 ## Roadmap
 See `docs/GAME_DESIGN.md` for the full roadmap.
-- next: fruit bandits (Pixel Adventure 2 enemies), double tap for a higher hop, pause, safe area
+- next: v0.4.2-v0.4.5 small releases (bounce-pad and other perches, fruit polish, pause and safe area, audio and settings), then v0.5 fruit bandits (Pixel Adventure 2 enemies)
 - later: more hazards, settings, iOS export (Xcode + Apple Developer account), ads/IAP plugins
