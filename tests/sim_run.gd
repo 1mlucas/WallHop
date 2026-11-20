@@ -31,6 +31,7 @@ var center_fruit_ids := {}
 var fruit_checked := {}
 var trapped_fruit := 0
 var stacked_perch_frames := 0
+var double_tap_timer := -1.0
 
 
 func _initialize() -> void:
@@ -276,7 +277,7 @@ func _test_swoop() -> void:
 
 
 ## Perches: reachable hop lands in the middle, the lift parks under the player,
-## a tap goes on to the far wall, and it gives out on its own after LIFT_HOLD.
+## a tap goes on to the far wall, and it gives out on its own after the zone's hold time.
 func _test_perch() -> void:
 	var player: Node2D = main.get("player")
 	main.call("_start_game")
@@ -328,7 +329,8 @@ func _test_perch() -> void:
 	while main.get("perch") != null and waited < 5.0:
 		main.call("_process", DT)
 		waited += DT
-	_check(absf(waited - Hazard.LIFT_HOLD) < 0.1, "perch should give out after %.1f s, took %.2f s" % [Hazard.LIFT_HOLD, waited])
+	var hold0: float = Zones.LIST[0]["perch_hold"]
+	_check(absf(waited - hold0) < 0.1, "perch should give out after %.1f s, took %.2f s" % [hold0, waited])
 	_finish_hop()
 	_check(is_equal_approx(player.position.x, main.CLING_R), "after the perch gives out the player must be on the far wall")
 	_check(int(main.get("perch_landings")) == 2, "perch_landings should be 2")
@@ -339,7 +341,10 @@ func _test_perch() -> void:
 	var top_speed: float = main.BASE_SPEED + main.MAX_EXTRA_SPEED
 	# Both spawn at y=-100. Worst case: the first one is caught as late as possible
 	# and ridden to the end; the next must not come within 200 px before it is gone.
-	var busy: float = (main.PERCH_STAND_Y + main.PERCH_CATCH_BELOW + 100.0) + (Hazard.LIFT_HOLD + main.PERCH_FLY_TIME) * top_speed
+	var longest := 0.0
+	for z: Dictionary in Zones.LIST:
+		longest = maxf(longest, float(z["perch_hold"]))
+	var busy: float = (main.PERCH_STAND_Y + main.PERCH_CATCH_BELOW + 100.0) + (longest + main.PERCH_FLY_TIME) * top_speed
 	var next_arrives: float = main.PERCH_STAND_Y - 200.0 + 100.0
 	_check(main.PERCH_SPACING + next_arrives >= busy, "PERCH_SPACING %.0f too small: perches could stack up" % main.PERCH_SPACING)
 	main.set("zone", 0)
@@ -426,6 +431,190 @@ func _test_moving_perch(pattern: String, drift: Vector2) -> void:
 		_check(is_equal_approx(player.position.x, main.CLING_L) or is_equal_approx(player.position.x, main.CLING_R), "%s: hop must end on a wall" % pattern)
 	main.set("reduced_motion", false)
 	_clear_world()
+
+
+func _first_perch() -> Hazard:
+	for c in (main.get("world") as Node2D).get_children():
+		if (c as Hazard).kind == "perch":
+			return c as Hazard
+	return null
+
+
+## Double tap: a second tap early in a hop makes it higher and longer, smoothly,
+## once per hop; late taps still queue the next hop; a high hop reaches higher perches.
+func _test_double_tap() -> void:
+	var player: Node2D = main.get("player")
+	for reduced: bool in [false, true]:
+		main.set("reduced_motion", reduced)
+		main.call("_start_game")
+		main.set("since_row", -100000.0)
+		_clear_world()
+		main.call("_on_tap")
+		for i in 6:
+			main.call("_process", DT)
+		main.call("_on_tap")
+		_check(int(main.get("high_hops")) == 1, "second tap early in a hop should make a high hop")
+		var arc: float = main.HIGH_ARC_REDUCED if reduced else main.HIGH_ARC
+		_check(is_equal_approx(float(main.get("fly_arc")), arc), "high hop arc should be %.0f (reduced=%s)" % [arc, str(reduced)])
+		main.call("_on_tap") # a third tap must not boost again
+		_check(int(main.get("high_hops")) == 1, "only one high hop per hop")
+		var last: Vector2 = player.position
+		var top := player.position.y
+		var biggest_step := 0.0
+		var air := 6.0 * DT
+		while main.get("flying") and air < 3.0:
+			main.call("_process", DT)
+			air += DT
+			biggest_step = maxf(biggest_step, player.position.distance_to(last))
+			last = player.position
+			top = minf(top, player.position.y)
+		_check(main.PLAYER_Y - top > arc * 0.8, "high hop should rise about %.0f px, rose %.0f" % [arc, main.PLAYER_Y - top])
+		_check(biggest_step < 30.0, "high hop must not jump (%.1f px in one frame)" % biggest_step)
+		_check(air > main.FLY_TIME + 0.2, "high hop should stay in the air longer (%.2f s)" % air)
+		_check(is_equal_approx(player.position.x, main.CLING_R) and player.position.y == main.PLAYER_Y, "high hop must land on the far wall at PLAYER_Y")
+	main.set("reduced_motion", false)
+
+	# A late second tap is a queued hop, not a boost.
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	main.call("_on_tap")
+	while float(main.get("fly_t")) < 0.8:
+		main.call("_process", DT)
+	main.call("_on_tap")
+	_check(int(main.get("high_hops")) == 0 and main.get("buffered"), "a late second tap should queue the next hop")
+	_finish_hop()
+	_finish_hop()
+	_check(is_equal_approx(player.position.x, main.CLING_L), "the queued hop should go back to the left wall")
+
+	# A high hop lands on a perch that a plain hop cannot reach.
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	_clear_world()
+	var reach: float = Zones.LIST[0]["perch_reach"]
+	main.call("_spawn_perch", main.PERCH_STAND_Y - reach - 100.0)
+	var lift := _first_perch()
+	_check(main.call("catchable_perch") == null, "this perch should be out of reach for a plain hop")
+	main.call("_on_tap")
+	main.call("_process", DT)
+	main.call("_on_tap")
+	_finish_hop()
+	_check(main.get("perch") == lift, "a high hop should land on a higher perch")
+	_clear_world()
+	main.call("_show_title")
+
+
+## Fruit tower: a plain hop gets at most 2, a double tap in the middle gets all 4,
+## with a timing window wide enough for a person.
+func _run_tower(start_at: float, boost: bool) -> int:
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	_clear_world()
+	main.call("_spawn_pattern", "fruit_tower", -100.0)
+	var first: Hazard = _fruit_in_world()[0]
+	var guard := 0
+	while first.position.y < main.PLAYER_Y + start_at and guard < 2000:
+		main.call("_process", DT)
+		guard += 1
+	main.call("_on_tap")
+	if boost:
+		while float(main.get("fly_t")) < 0.5:
+			main.call("_process", DT)
+		main.call("_on_tap")
+	for i in int(2.5 / DT):
+		main.call("_process", DT)
+	return int(main.get("fruit_count"))
+
+
+func _test_fruit_tower() -> void:
+	var best_plain := 0
+	var best_boost := 0
+	var good_offsets := 0
+	for k in 50:
+		var at := -500.0 + k * 12.0
+		best_plain = maxi(best_plain, _run_tower(at, false))
+		var got := _run_tower(at, true)
+		best_boost = maxi(best_boost, got)
+		if got >= 3:
+			good_offsets += 1
+	print("fruit tower: plain hop best %d, double tap best %d, %d of 50 timings get 3+" % [best_plain, best_boost, good_offsets])
+	_check(best_plain <= 2, "a plain hop should get at most 2 tower fruit, got %d" % best_plain)
+	_check(best_boost == 4, "a double tap in the middle should get all 4 tower fruit, best %d" % best_boost)
+	_check(good_offsets >= 4, "the double tap timing window is too tight (%d of 50)" % good_offsets)
+	_clear_world()
+	main.call("_show_title")
+
+
+## Perch feedback: landing ghost, timer dots (3 steps, no blinking), landing press,
+## warning sound, hold time per zone.
+func _test_perch_feedback() -> void:
+	var ghost: Sprite2D = main.get("landing_ghost")
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	_clear_world()
+	main.call("_process", DT)
+	_check(not ghost.visible, "no landing ghost without a perch")
+	main.call("_spawn_perch", main.PERCH_STAND_Y - 120.0)
+	var lift := _first_perch()
+	main.call("_process", DT)
+	var feet: Vector2 = lift.perch_point() - Vector2(0, main.PERCH_FEET)
+	_check(ghost.visible and ghost.position.distance_to(feet) < 1.0, "landing ghost should stand on the reachable perch")
+	main.call("_on_tap")
+	main.call("_process", DT)
+	_check(not ghost.visible, "landing ghost hides while hopping")
+	_finish_hop()
+	_check(lift.dots_left() == 3, "timer should show 3 dots after landing")
+	var changes := 0
+	var last := 3
+	var deepest := 0.0
+	var warned_at := -1.0
+	var t := 0.0
+	while main.get("perch") == lift:
+		main.call("_process", DT)
+		t += DT
+		deepest = maxf(deepest, lift.dip)
+		if lift.warned and warned_at < 0.0:
+			warned_at = t
+		var now := lift.dots_left()
+		var lit := 0
+		for d in lift.dots:
+			if d.visible:
+				lit += 1
+		_check(lit == now, "visible dots %d should match the timer %d" % [lit, now])
+		if now != last:
+			changes += 1
+			_check(now < last, "timer dots must only go out, never back on")
+			last = now
+	_check(changes <= 3 and float(changes) / t <= 3.0, "timer changed %d times in %.1f s" % [changes, t])
+	_check(deepest > 4.0 and deepest < 14.0, "landing should press the perch a few px (%.1f)" % deepest)
+	var hold: float = Zones.LIST[0]["perch_hold"]
+	_check(absf(warned_at - (hold - Hazard.LIFT_WARN)) < 0.1, "warning sound should play %.1f s before the end (at %.2f)" % [Hazard.LIFT_WARN, warned_at])
+	_clear_world()
+
+	# Reduced motion: no landing press.
+	main.set("reduced_motion", true)
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	_clear_world()
+	main.call("_spawn_perch", main.PERCH_STAND_Y - 120.0)
+	lift = _first_perch()
+	main.call("_on_tap")
+	_finish_hop()
+	for i in 20:
+		main.call("_process", DT)
+	_check(absf(lift.dip) < 0.01, "reduced motion: the perch must not dip")
+	main.set("reduced_motion", false)
+	_clear_world()
+
+	# Hold time and reach come from the zone.
+	for zi in Zones.LIST.size():
+		main.set("zone", zi)
+		main.call("_spawn_perch", 0.0)
+		_check(is_equal_approx(_first_perch().hold_time, float(Zones.LIST[zi]["perch_hold"])), "zone %d perch hold time" % zi)
+		_clear_world()
+	_check(float(Zones.LIST[0]["perch_hold"]) > float(Zones.LIST[Zones.LIST.size() - 1]["perch_hold"]), "perches should hold longer in the first zone than in the last")
+	for n: String in ["high_hop", "perch_land", "perch_warn"]:
+		_check((main.get("sfx") as Dictionary).has(n), "missing sound " + n)
+	main.call("_show_title")
 
 
 ## Continue after game over: price per use, limit, wallet, no double banking, protection.
@@ -590,6 +779,9 @@ func _start_run() -> void:
 		_test_fruit_clearance()
 		_test_swoop()
 		_test_perch()
+		_test_double_tap()
+		_test_fruit_tower()
+		_test_perch_feedback()
 		_test_continue()
 		_test_shop_taps()
 		_test_comfort()
@@ -618,6 +810,12 @@ func _step() -> void:
 	if tap_timer <= 0.0:
 		main.call("_on_tap")
 		tap_timer = randf_range(0.25, 1.2)
+		if randf() < 0.3:
+			double_tap_timer = randf_range(0.08, 0.2) # sometimes a quick second tap
+	if double_tap_timer >= 0.0:
+		double_tap_timer -= DT
+		if double_tap_timer < 0.0:
+			main.call("_on_tap")
 
 	zones_seen[main.get("zone")] = true
 	if main.position != Vector2.ZERO:
@@ -669,6 +867,7 @@ func _end_run() -> void:
 	print("run %d: %.0f m, zones %s, kinds %s, center fruit %d, perch landings %d, bot hits %d" % [
 		run, meters, str(zones_seen.keys()), str(kinds_seen.keys()), center_fruit, landings, int(main.get("god_hits"))])
 	_check(landings >= 2, "run %d: the bot landed on only %d perches" % [run, landings])
+	_check(int(main.get("high_hops")) > 20, "run %d: the bot made only %d high hops" % [run, int(main.get("high_hops"))])
 	_check(stacked_perch_frames == 0, "run %d: two perches stacked up in %d frames" % [run, stacked_perch_frames])
 	_check(trapped_fruit == 0, "run %d: %d fruit spawned on a hazard" % [run, trapped_fruit])
 	_check(zones_seen.size() == Zones.LIST.size(), "run %d reached only zones %s" % [run, str(zones_seen.keys())])
