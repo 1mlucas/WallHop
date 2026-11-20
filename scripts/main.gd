@@ -30,7 +30,7 @@ const MAX_EXTRA_SPEED := 140.0 # top scroll speed 420 px/s (was 540)
 const BREATHER := 450.0 # empty space after a zone change
 const SAVE_PATH := "user://wallhop.cfg"
 
-const SFX_NAMES := ["jump", "wall_jump", "fruit", "hit", "click", "highscore"]
+const SFX_NAMES := ["jump", "wall_jump", "fruit", "hit", "click", "highscore", "high_hop", "perch_land", "perch_warn"]
 const MUTE_RECT := Rect2(W - 100.0, 30.0, 80.0, 80.0)
 # Character picker on the title screen
 const PICK_Y := 1010.0
@@ -60,16 +60,24 @@ const FRUIT_CLEARANCE := 40.0 # fruit keeps this far from any hazard's reach
 const FRUIT_LANE_MARGIN := 70.0 # middle fruit stays out of reach from the walls
 # Perches: hovering lifts in the middle. Hop onto one, rest, hop on to the far wall.
 const PERCH_STAND_Y := PLAYER_Y + 60.0 # where a perch parks under the player's feet
-const PERCH_CATCH_ABOVE := 220.0 # a hop reaches perches this far above the parking spot...
+# A hop reaches perches up to the zone's "perch_reach" above the parking spot...
 const PERCH_CATCH_BELOW := 40.0 # ...and this far below it
 const PERCH_FLY_TIME := 0.28 # half a hop: wall to middle or middle to wall
 const PERCH_ARC := 40.0
-const PERCH_SPACING := 1300.0 # px of climb between two perches, so they never stack up
+const PERCH_SPACING := 1500.0 # px of climb between two perches, so they never stack up
 const PERCH_FEET := PERCH_STAND_Y - PLAYER_Y # player centre above the plank
 const PERCH_SLIDE := 110.0 # sliding perch: glides this far left and right of the middle
 const PERCH_RISE := 90.0 # elevator perch: rises and sinks this far
 const PERCH_SINK := 80.0 # sinking perch: carries the rider down this many px/s
 const PERCH_GLIDE_PERIOD := Vector2(3.0, 3.6) # seconds for one full glide (random in range)
+const PERCH_DIP_SPEED := 200.0 # landing press on a perch (about 8 px down and back)
+# Double tap: a second tap in the first part of a hop turns it into a high hop.
+const BOOST_WINDOW := 0.65 # hop progress up to which a second tap boosts; later taps queue the next hop
+const HIGH_ARC := 190.0
+const HIGH_ARC_REDUCED := 140.0
+const HIGH_FLY_TIME := 0.46 # the rest of the hop after the boost
+const HIGH_REACH := 150.0 # a high hop lands on perches this much further up
+const TOWER_STEP := 75.0 # fruit tower: vertical gap between fruit
 
 var mode: Mode = Mode.TITLE
 var flying := false
@@ -84,6 +92,10 @@ var perch: Hazard = null # the lift the player stands on
 var perch_target: Hazard = null # the lift the current hop is heading for
 var last_perch_at := -100000.0 # distance when the last perch spawned
 var perch_landings := 0 # this run, for tests
+var boosted := false # this hop already used its double tap
+var hop_from_wall := false # this hop started on a wall (not on a perch)
+var high_hops := 0 # this run, for tests
+var landing_ghost: Sprite2D # faint copy of the player on the perch the next hop would land on
 var buffered := false
 
 var speed := 0.0
@@ -299,6 +311,11 @@ func _build_background() -> void:
 
 
 func _build_player() -> void:
+	landing_ghost = Sprite2D.new()
+	landing_ghost.scale = Vector2(S, S)
+	landing_ghost.modulate = Color(1, 1, 1, 0.35)
+	landing_ghost.visible = false
+	add_child(landing_ghost)
 	player = AnimatedSprite2D.new()
 	player.sprite_frames = Catalog.character_frames(selected)
 	player.scale = Vector2(S, S)
@@ -725,6 +742,7 @@ func _start_game() -> void:
 	since_row = 0.0
 	last_perch_at = -100000.0
 	perch_landings = 0
+	high_hops = 0
 	fruit_count = 0
 	fruit_points = 0
 	banked = 0
@@ -1008,7 +1026,10 @@ func _on_tap() -> void:
 			_start_game()
 		Mode.PLAY:
 			if flying:
-				if fly_t > 0.5:
+				# Second tap early in a hop: high hop. Later: queue the next hop.
+				if not boosted and fly_t < BOOST_WINDOW:
+					_boost()
+				elif fly_t > 0.5:
 					buffered = true
 			else:
 				_begin_jump()
@@ -1030,6 +1051,8 @@ func _back_to_title() -> void:
 func _begin_jump() -> void:
 	flying = true
 	buffered = false
+	boosted = false
+	hop_from_wall = perch == null
 	fly_t = 0.0
 	fly_from = player.position.x
 	fly_from_y = player.position.y
@@ -1065,9 +1088,11 @@ func _land() -> void:
 		perch_target = null
 		perch.hold_clock = 0.0
 		perch_landings += 1
+		if not reduced_motion:
+			perch.dip_v = PERCH_DIP_SPEED
 		player.flip_h = on_left # keep facing the wall it will hop to next
 		player.play("idle")
-		_sfx("wall_jump")
+		_sfx("perch_land")
 		_spawn_dust(Vector2(player.position.x, PLAYER_Y + 44.0), Vector2.UP)
 	else:
 		player.flip_h = not on_left
@@ -1087,16 +1112,41 @@ func _fly_target() -> Vector2:
 	return Vector2(fly_to, PLAYER_Y)
 
 
-## The perch the next hop from a wall would land on, or null.
-func catchable_perch() -> Hazard:
+## The perch the next hop from a wall would land on, or null. `extra` widens the
+## reach upwards (a high hop).
+func catchable_perch(extra: float = 0.0) -> Hazard:
+	var reach: float = Zones.LIST[zone]["perch_reach"] + extra
 	for c in world.get_children():
 		var h := c as Hazard
 		if h.kind != "perch" or h.held or h.spent or h.is_queued_for_deletion():
 			continue
 		var dy := h.perch_point().y - PERCH_STAND_Y
-		if dy >= -PERCH_CATCH_ABOVE and dy <= PERCH_CATCH_BELOW:
+		if dy >= -reach and dy <= PERCH_CATCH_BELOW:
 			return h
 	return null
+
+
+## Double tap: the hop restarts from where the player is, higher and a little longer
+## (lands later, so a saw on the target wall can pass first). It can also reach a
+## perch further up.
+func _boost() -> void:
+	boosted = true
+	high_hops += 1
+	fly_from = player.position.x
+	fly_from_y = player.position.y
+	fly_t = 0.0
+	fly_dur = HIGH_FLY_TIME
+	fly_arc = HIGH_ARC_REDUCED if reduced_motion else HIGH_ARC
+	if hop_from_wall and perch_target == null:
+		perch_target = catchable_perch(HIGH_REACH)
+		if perch_target:
+			perch_target.held = true
+			perch_target.lit = false
+			fly_to = W * 0.5
+	player.play("spin")
+	player.frame = 0
+	_sfx("high_hop")
+	_spawn_dust(player.position + Vector2(0, 40.0), Vector2.DOWN)
 
 
 ## The player leaves the perch: it is used up and drops away.
@@ -1172,8 +1222,12 @@ func _update_play(delta: float) -> void:
 			_spawn_ghost()
 		if fly_t >= 1.0:
 			_land()
-	elif perch and perch.hold_clock >= Hazard.LIFT_HOLD:
-		_begin_jump() # the lift gives out: the player hops on to the next wall
+	elif perch:
+		if not perch.warned and perch.hold_clock >= perch.hold_time - Hazard.LIFT_WARN:
+			perch.warned = true
+			_sfx("perch_warn")
+		if perch.hold_clock >= perch.hold_time:
+			_begin_jump() # the lift gives out: the player hops on to the next wall
 
 	since_row += dy
 	var gap := lerpf(460.0, 340.0, clampf(distance / 20000.0, 0.0, 1.0))
@@ -1207,6 +1261,19 @@ func _update_play(delta: float) -> void:
 		# Ride along with the perch (it may glide sideways or up and down); done after
 		# the perch moved this frame so the feet never slip on the plank.
 		player.position = perch.perch_point() - Vector2(0, PERCH_FEET)
+	_update_landing_ghost()
+
+
+## Shows a faint copy of the player where the next hop would land on a perch.
+func _update_landing_ghost() -> void:
+	var p: Hazard = null
+	if mode == Mode.PLAY and not flying and perch == null:
+		p = catchable_perch()
+	landing_ghost.visible = p != null
+	if p:
+		landing_ghost.texture = player.sprite_frames.get_frame_texture("idle", 0)
+		landing_ghost.flip_h = on_left # the hop will face away from this wall
+		landing_ghost.position = p.perch_point() - Vector2(0, PERCH_FEET)
 
 
 ## Softly fades the player in and out while the post-continue protection lasts
@@ -1321,6 +1388,13 @@ func _spawn_pattern(pattern: String, y: float) -> float:
 			# A perch gliding left and right; fruit in a wide wave above it.
 			_spawn_perch(y, Vector2(PERCH_SLIDE, 0.0))
 			var pts := FruitLayout.wave(3, W * 0.5, PERCH_SLIDE * 0.6, y - 280.0, 120.0, lo, hi)
+			return _place_fruit(pts, y)
+		"fruit_tower":
+			# A column of fruit in the middle: a plain hop crosses it and gets one or two,
+			# a double tap in the middle shoots up through it and gets them all.
+			var pts: Array[Vector2] = []
+			for i in 4:
+				pts.append(Vector2(W * 0.5 + randf_range(-12.0, 12.0), y - i * TOWER_STEP))
 			return _place_fruit(pts, y)
 		"perch_sink":
 			# A perch that sinks with the rider: rest, but hop off before it gets too low.
@@ -1531,6 +1605,7 @@ func _spawn_fireball(y: float) -> void:
 func _spawn_perch(y: float, drift: Vector2 = Vector2.ZERO) -> void:
 	var h := _make_hazard("perch", Vector2(W * 0.5, y), 0.0)
 	h.hold_y = PERCH_STAND_Y
+	h.hold_time = Zones.LIST[zone]["perch_hold"]
 	h.drift = drift * (0.5 if reduced_motion else 1.0)
 	h.period = randf_range(PERCH_GLIDE_PERIOD.x, PERCH_GLIDE_PERIOD.y)
 	h.phase = randf() * h.period
@@ -1540,6 +1615,14 @@ func _spawn_perch(y: float, drift: Vector2 = Vector2.ZERO) -> void:
 	s.play("on")
 	h.add_child(s)
 	h.body = s
+	# Timer dots under the propeller (children of the plank, so they glide with it).
+	for i in 3:
+		var d := ColorRect.new()
+		d.size = Vector2(3, 3)
+		d.position = Vector2(-7.5 + i * 6.0, 7.0)
+		d.visible = false
+		s.add_child(d)
+		h.dots.append(d)
 	h.tick(0.0, 0.0)
 	last_perch_at = distance
 

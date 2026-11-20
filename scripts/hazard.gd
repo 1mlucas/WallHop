@@ -7,7 +7,7 @@ enum Motion { NONE, SLIDE, SWING, FIRE, SHOOT }
 const FIRE_PERIOD := 2.4
 const FIRE_WARN := 0.45 # flicker time before burning; longer than a hop (0.36 s)
 const FIRE_BURN := 0.85
-const LIFT_HOLD := 2.0 # perch: seconds it carries the player before giving out
+const LIFT_HOLD := 2.0 # perch: default seconds it carries the player (zones override it)
 const LIFT_WARN := 0.8 # perch: propeller stops and it warms up this long before
 const LIFT_HALF_W := 48.0 # perch: half width of the plank (32 px art at 3x)
 
@@ -41,6 +41,11 @@ var fall_v := 0.0
 var lit := false # reachable with the next hop: drawn a bit brighter
 var drift := Vector2.ZERO # moving perch: how far it glides sideways (x) or up and down (y)
 var sink := 0.0 # sinking perch: px/s it carries the rider down the screen
+var hold_time := LIFT_HOLD # perch: seconds it carries the player in this zone
+var warned := false # perch: the "about to give out" sound was played
+var dip := 0.0 # perch: how far the plank is pressed down by a landing (springs back)
+var dip_v := 0.0
+var dots: Array[ColorRect] = [] # perch: timer under the plank, one dot goes out per third
 
 
 ## Moves the object down by `dy` and advances its own animation.
@@ -84,20 +89,32 @@ func tick(delta: float, dy: float) -> void:
 
 func _tick_perch(delta: float, dy: float) -> void:
 	var sprite := body as AnimatedSprite2D
+	# Landing press: a soft damped spring, a few pixels down and back.
+	dip_v += (-260.0 * dip - 18.0 * dip_v) * delta
+	dip += dip_v * delta
+	var glide := Vector2.ZERO
 	if drift != Vector2.ZERO:
 		# A sine glide: slow at both ends, never a sudden turn. Keeps going while carrying the player.
-		sprite.position = drift * sin(TAU * (clock + phase) / period)
+		glide = drift * sin(TAU * (clock + phase) / period)
+	sprite.position = glide + Vector2(0, dip)
 	if held:
 		# Eases into place under the player, then hovers there (the world keeps scrolling).
 		hold_clock += delta
 		# A sinking perch keeps going down with the rider (eased by the same smoothing).
 		position.y = lerpf(position.y, hold_y + sink * hold_clock, 1.0 - exp(-12.0 * delta))
-		var warn := clampf((hold_clock - (LIFT_HOLD - LIFT_WARN)) / LIFT_WARN, 0.0, 1.0)
+		var warn := clampf((hold_clock - (hold_time - LIFT_WARN)) / LIFT_WARN, 0.0, 1.0)
 		if warn > 0.0 and sprite.animation != &"off":
 			sprite.play(&"off")
 		# Slowly warms to orange (no blinking) so the player knows it is about to give out.
 		sprite.modulate = Color.WHITE.lerp(Color(1.0, 0.55, 0.35), warn)
+		# Timer: three dots, one goes out per third of the hold (3 changes in 1.5-2.5 s).
+		var left := dots_left()
+		for i in dots.size():
+			dots[i].visible = i < left
+			dots[i].color = Color(1.0, 0.95, 0.6) if warn <= 0.0 else Color(1.0, 0.6, 0.3)
 		return
+	for d in dots:
+		d.visible = false
 	position.y += dy
 	if spent:
 		if drop:
@@ -167,3 +184,10 @@ func blocks(p: Vector2, margin: float) -> bool:
 ## Perch: where the plank is right now (its base position plus its glide).
 func perch_point() -> Vector2:
 	return position + body.position
+
+
+## Perch timer: dots still lit (3 right after landing, 0 when it gives out).
+func dots_left() -> int:
+	if not held:
+		return 0
+	return clampi(ceili(3.0 * (1.0 - hold_clock / hold_time)), 0, 3)
