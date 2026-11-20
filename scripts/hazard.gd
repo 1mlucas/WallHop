@@ -39,6 +39,7 @@ var spent := false # already used: drops away
 var drop := true # spent perches fall; with reduced motion they only fade
 var fall_v := 0.0
 var lit := false # reachable with the next hop: drawn a bit brighter
+var drift := Vector2.ZERO # moving perch: how far it glides sideways (x) or up and down (y)
 
 
 ## Moves the object down by `dy` and advances its own animation.
@@ -82,6 +83,9 @@ func tick(delta: float, dy: float) -> void:
 
 func _tick_perch(delta: float, dy: float) -> void:
 	var sprite := body as AnimatedSprite2D
+	if drift != Vector2.ZERO:
+		# A sine glide: slow at both ends, never a sudden turn. Keeps going while carrying the player.
+		sprite.position = drift * sin(TAU * (clock + phase) / period)
 	if held:
 		# Eases into place under the player, then hovers there (the world keeps scrolling).
 		position.y = lerpf(position.y, hold_y, 1.0 - exp(-12.0 * delta))
@@ -143,7 +147,8 @@ func blocks(p: Vector2, margin: float) -> bool:
 	if kind == "fruit":
 		return false
 	if kind == "perch":
-		return absf(p.x - position.x) < LIFT_HALF_W + margin and absf(p.y - position.y) < 15.0 + margin
+		return absf(p.x - position.x) < LIFT_HALF_W + absf(drift.x) + margin \
+			and absf(p.y - position.y) < 15.0 + absf(drift.y) + margin
 	match motion:
 		Motion.SLIDE:
 			var dx := p.x - position.x
@@ -155,3 +160,8 @@ func blocks(p: Vector2, margin: float) -> bool:
 		Motion.SHOOT:
 			return absf(p.y - position.y) < r + margin
 	return touches(p, margin)
+
+
+## Perch: where the plank is right now (its base position plus its glide).
+func perch_point() -> Vector2:
+	return position + body.position

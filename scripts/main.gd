@@ -65,12 +65,17 @@ const PERCH_CATCH_BELOW := 40.0 # ...and this far below it
 const PERCH_FLY_TIME := 0.28 # half a hop: wall to middle or middle to wall
 const PERCH_ARC := 40.0
 const PERCH_SPACING := 1300.0 # px of climb between two perches, so they never stack up
+const PERCH_FEET := PERCH_STAND_Y - PLAYER_Y # player centre above the plank
+const PERCH_SLIDE := 90.0 # sliding perch: glides this far left and right of the middle
+const PERCH_RISE := 60.0 # elevator perch: rises and sinks this far
+const PERCH_GLIDE_PERIOD := Vector2(3.0, 3.6) # seconds for one full glide (random in range)
 
 var mode: Mode = Mode.TITLE
 var flying := false
 var on_left := true
 var fly_t := 0.0
 var fly_from := 0.0
+var fly_from_y := PLAYER_Y
 var fly_to := 0.0
 var fly_dur := FLY_TIME
 var fly_arc := ARC
@@ -1026,6 +1031,7 @@ func _begin_jump() -> void:
 	buffered = false
 	fly_t = 0.0
 	fly_from = player.position.x
+	fly_from_y = player.position.y
 	if perch:
 		_release_perch()
 		fly_to = _cling_x(on_left)
@@ -1052,7 +1058,7 @@ func _begin_jump() -> void:
 
 func _land() -> void:
 	flying = false
-	player.position = Vector2(fly_to, PLAYER_Y)
+	player.position = _fly_target()
 	if perch_target:
 		perch = perch_target
 		perch_target = null
@@ -1073,13 +1079,20 @@ func _land() -> void:
 		_begin_jump()
 
 
+## Where the current hop ends: a wall, or the top of a (maybe moving) perch.
+func _fly_target() -> Vector2:
+	if perch_target:
+		return perch_target.perch_point() - Vector2(0, PERCH_FEET)
+	return Vector2(fly_to, PLAYER_Y)
+
+
 ## The perch the next hop from a wall would land on, or null.
 func catchable_perch() -> Hazard:
 	for c in world.get_children():
 		var h := c as Hazard
 		if h.kind != "perch" or h.held or h.spent or h.is_queued_for_deletion():
 			continue
-		var dy := h.position.y - PERCH_STAND_Y
+		var dy := h.perch_point().y - PERCH_STAND_Y
 		if dy >= -PERCH_CATCH_ABOVE and dy <= PERCH_CATCH_BELOW:
 			return h
 	return null
@@ -1147,8 +1160,11 @@ func _update_play(delta: float) -> void:
 		fly_t += delta / fly_dur
 		var t := minf(fly_t, 1.0)
 		# Smoothstep: no sudden start or stop, so the eyes can follow the hop.
-		player.position.x = lerpf(fly_from, fly_to, t * t * (3.0 - 2.0 * t))
-		player.position.y = PLAYER_Y - sin(t * PI) * fly_arc
+		# The target follows a moving perch, so the landing is always on the plank.
+		var s := t * t * (3.0 - 2.0 * t)
+		var target := _fly_target()
+		player.position.x = lerpf(fly_from, target.x, s)
+		player.position.y = lerpf(fly_from_y, target.y, s) - sin(t * PI) * fly_arc
 		trail_timer -= delta
 		if trail_timer <= 0.0 and not reduced_motion:
 			trail_timer = TRAIL_EVERY
@@ -1185,6 +1201,11 @@ func _update_play(delta: float) -> void:
 				_die()
 				if mode != Mode.PLAY:
 					return
+
+	if perch and not flying:
+		# Ride along with the perch (it may glide sideways or up and down); done after
+		# the perch moved this frame so the feet never slip on the plank.
+		player.position = perch.perch_point() - Vector2(0, PERCH_FEET)
 
 
 ## Softly fades the player in and out while the post-continue protection lasts
@@ -1295,6 +1316,16 @@ func _spawn_pattern(pattern: String, y: float) -> float:
 			_spawn_saw(left, y - 40.0)
 			_spawn_saw(not left, y - 300.0)
 			return 300.0
+		"perch_slide":
+			# A perch gliding left and right; fruit in a wide wave above it.
+			_spawn_perch(y, Vector2(PERCH_SLIDE, 0.0))
+			var pts := FruitLayout.wave(3, W * 0.5, PERCH_SLIDE * 0.6, y - 280.0, 120.0, lo, hi)
+			return _place_fruit(pts, y)
+		"perch_lift":
+			# An elevator perch rising and sinking; a fruit column above it.
+			_spawn_perch(y, Vector2(0.0, PERCH_RISE))
+			var pts := FruitLayout.wave(3, W * 0.5, 20.0, y - 300.0, 110.0, lo, hi)
+			return _place_fruit(pts, y)
 		"fireball":
 			_spawn_fireball(y)
 		"sky_fruit":
@@ -1488,15 +1519,21 @@ func _spawn_fireball(y: float) -> void:
 	h.tick(0.0, 0.0)
 
 
-func _spawn_perch(y: float) -> void:
+## A perch in the middle. `drift` makes it glide sideways (x) or up and down (y);
+## reduced motion halves the glide.
+func _spawn_perch(y: float, drift: Vector2 = Vector2.ZERO) -> void:
 	var h := _make_hazard("perch", Vector2(W * 0.5, y), 0.0)
 	h.hold_y = PERCH_STAND_Y
+	h.drift = drift * (0.5 if reduced_motion else 1.0)
+	h.period = randf_range(PERCH_GLIDE_PERIOD.x, PERCH_GLIDE_PERIOD.y)
+	h.phase = randf() * h.period
 	var s := AnimatedSprite2D.new()
 	s.sprite_frames = perch_frames
 	s.scale = Vector2(S, S)
 	s.play("on")
 	h.add_child(s)
 	h.body = s
+	h.tick(0.0, 0.0)
 	last_perch_at = distance
 
 
