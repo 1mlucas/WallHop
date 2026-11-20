@@ -7,6 +7,7 @@ extends SceneTree
 const Zones := preload("res://scripts/zones.gd")
 const Hazard := preload("res://scripts/hazard.gd")
 const Catalog := preload("res://scripts/catalog.gd")
+const FruitLayout := preload("res://scripts/fruit_layout.gd")
 
 const DT := 1.0 / 60.0
 const RUNS := 3
@@ -27,6 +28,9 @@ var fireball_out_frames := 0
 var shake_frames := 0
 var bg_moved_frames := 0
 var center_fruit_ids := {}
+var fruit_checked := {}
+var trapped_fruit := 0
+var stacked_perch_frames := 0
 
 
 func _initialize() -> void:
@@ -97,6 +101,46 @@ func _test_catalog() -> void:
 		seen[Catalog.pick_fruit()] = true
 	_check(seen.size() == Catalog.FRUITS.size(), "pick_fruit never picked some fruit: %s" % str(seen.keys()))
 
+	# v0.4 table: every fruit has its own fixed value.
+	var points: Array[int] = []
+	for f: String in fruits:
+		points.append(int(Catalog.FRUITS[f]["points"]))
+	_check(points == [5, 8, 10, 12, 15, 20, 30, 50], "fruit points should be 5/8/10/12/15/20/30/50, got %s" % str(points))
+
+	# Shuffle bag: one full bag holds each fruit exactly `weight` times.
+	for bag in 3:
+		Catalog.reset_bag()
+		var counts := {}
+		for _n in Catalog.bag_size():
+			var f := Catalog.pick_fruit()
+			counts[f] = int(counts.get(f, 0)) + 1
+		for f: String in Catalog.FRUITS:
+			_check(int(counts.get(f, 0)) == int(Catalog.FRUITS[f]["weight"]),
+				"bag gave %s %d times, expected %d" % [f, int(counts.get(f, 0)), int(Catalog.FRUITS[f]["weight"])])
+
+	_test_layouts()
+
+
+## Pure layout shapes: inside their area, spread out, different every time.
+func _test_layouts() -> void:
+	var shapes := {}
+	for t in 200:
+		var w := FruitLayout.wave(6, 360.0, 110.0, 0.0, 120.0, 250.0, 470.0)
+		shapes[int(w[1].x / 10.0)] = true
+		for i in w.size():
+			_check(w[i].x >= 250.0 and w[i].x <= 470.0, "wave fruit outside the lane at x=%.0f" % w[i].x)
+			if i > 0:
+				_check(w[i - 1].distance_to(w[i]) >= 95.0, "wave fruit too close: %.0f px" % w[i - 1].distance_to(w[i]))
+				_check(w[i].y < w[i - 1].y, "wave must go upwards")
+		var c := FruitLayout.cluster(Vector2(360, 0), 6, 100.0)
+		for i in c.size():
+			_check(c[i].distance_to(Vector2(360, 0)) <= 100.0, "cluster fruit outside its radius")
+			if i > 0:
+				_check(c[i].y <= c[i - 1].y, "cluster must be sorted bottom to top")
+			for j in range(i + 1, c.size()):
+				_check(c[i].distance_to(c[j]) >= 45.0, "cluster fruit overlap: %.0f px" % c[i].distance_to(c[j]))
+	_check(shapes.size() >= 8, "waves look the same every time (%d shapes)" % shapes.size())
+
 
 ## Shop rules, run once on a fresh main scene (god_mode: nothing is saved).
 func _test_shop() -> void:
@@ -145,6 +189,173 @@ func _test_fruit_trail() -> void:
 	for c in world.get_children():
 		world.remove_child(c)
 		c.free()
+
+
+func _clear_world() -> void:
+	var world: Node2D = main.get("world")
+	for c in world.get_children():
+		world.remove_child(c)
+		c.free()
+
+
+func _fruit_in_world() -> Array[Hazard]:
+	var out: Array[Hazard] = []
+	for c in (main.get("world") as Node2D).get_children():
+		if (c as Hazard).kind == "fruit" and not c.is_queued_for_deletion():
+			out.append(c as Hazard)
+	return out
+
+
+func _finish_hop() -> void:
+	var guard := 0
+	while main.get("flying") and guard < 120:
+		main.call("_process", DT)
+		guard += 1
+
+
+## Fruit is worth its fixed value: no multiplier, however many are eaten in a row.
+func _test_fruit_points() -> void:
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	var total := 0
+	for i in 8:
+		main.call("_spawn_fruit", Vector2(main.W * 0.5, 300.0))
+		var f: Hazard = _fruit_in_world().back()
+		total += f.value
+		main.call("_collect", f)
+	_check(int(main.get("fruit_points")) == total, "8 fruit in a row should give %d points, got %d" % [total, int(main.get("fruit_points"))])
+	_clear_world()
+
+
+## Fruit is never placed inside the reach of a hazard (whole swing or slide).
+func _test_fruit_clearance() -> void:
+	main.call("_start_game")
+	var placed := 0
+	for t in 120:
+		_clear_world()
+		var hazard: String = ["ball", "saw_slide", "zigzag", "fireball", "perch_saws"][t % 5]
+		main.call("_spawn_pattern", hazard, -100.0)
+		var fruit_pattern: String = ["fruit_wave", "fruit_trail", "sky_fruit", "fruit_swoop"][t % 4]
+		main.call("_spawn_pattern", fruit_pattern, -100.0 + randf_range(-200.0, 100.0))
+		var fruit := _fruit_in_world()
+		placed += fruit.size()
+		for f in fruit:
+			for c in (main.get("world") as Node2D).get_children():
+				var h := c as Hazard
+				if h.kind != "fruit":
+					_check(not h.blocks(f.position, 0.0), "%s placed inside a %s (%s)" % [fruit_pattern, h.kind, str(f.position)])
+	_check(placed > 100, "clearance removed almost all fruit (%d left)" % placed)
+	_clear_world()
+
+
+## A swoop ribbon is eaten completely by one hop started at the right moment.
+func _test_swoop() -> void:
+	var player: Node2D = main.get("player")
+	for t in 30:
+		main.call("_start_game")
+		main.set("since_row", -100000.0)
+		_clear_world()
+		main.call("_spawn_pattern", "fruit_swoop", -100.0)
+		var fruit := _fruit_in_world()
+		_check(fruit.size() >= 3, "swoop should have 3-4 fruit, got %d" % fruit.size())
+		if fruit.is_empty():
+			continue
+		# Stand on the wall the ribbon starts from.
+		var from_left: bool = fruit[0].position.x < main.W * 0.5
+		main.set("on_left", from_left)
+		player.position.x = main.call("_cling_x", from_left)
+		var start_y := fruit[0].position.y
+		var guard := 0
+		while fruit[0].position.y - start_y - 100.0 < main.PLAYER_Y and guard < 1000:
+			main.call("_process", DT)
+			guard += 1
+		main.call("_on_tap")
+		_finish_hop()
+		_check(int(main.get("fruit_count")) == fruit.size(), "one hop ate %d of %d swoop fruit" % [int(main.get("fruit_count")), fruit.size()])
+	_clear_world()
+
+
+## Perches: reachable hop lands in the middle, the lift parks under the player,
+## a tap goes on to the far wall, and it gives out on its own after LIFT_HOLD.
+func _test_perch() -> void:
+	var player: Node2D = main.get("player")
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	_clear_world()
+
+	# Too high: a normal wall hop.
+	main.call("_spawn_perch", 200.0)
+	_check(main.call("catchable_perch") == null, "a far perch must not be reachable")
+	main.call("_on_tap")
+	_check(is_equal_approx(float(main.get("fly_to")), main.CLING_R), "hop without a perch in reach must go to the wall")
+	_finish_hop()
+	_clear_world()
+
+	# In reach: stop in the middle (player is on the right wall now, heading left).
+	main.call("_spawn_pattern", "perch", main.PERCH_STAND_Y - 150.0)
+	var lift: Hazard = null
+	for c in (main.get("world") as Node2D).get_children():
+		if (c as Hazard).kind == "perch":
+			lift = c
+	main.call("_process", DT)
+	_check(lift.lit, "a reachable perch should be highlighted")
+	main.call("_on_tap")
+	_check(is_equal_approx(float(main.get("fly_to")), main.W * 0.5), "hop with a perch in reach must stop in the middle")
+	_finish_hop()
+	_check(main.get("perch") == lift, "player should stand on the perch")
+	_check(player.position == Vector2(main.W * 0.5, main.PLAYER_Y), "player should stand in the middle at PLAYER_Y")
+	for i in int(1.2 / DT):
+		main.call("_process", DT)
+	_check(main.get("perch") == lift and not main.get("flying"), "the perch should carry the player for a while")
+	_check(absf(lift.position.y - main.PERCH_STAND_Y) < 2.0, "the perch should park under the player (y=%.1f)" % lift.position.y)
+	_check(int(main.get("fruit_count")) >= 2, "riding the perch should collect the fruit above it (%d)" % int(main.get("fruit_count")))
+
+	# Tap: go on to the left wall (the one it was heading for).
+	main.call("_on_tap")
+	_finish_hop()
+	_check(is_equal_approx(player.position.x, main.CLING_L), "from a perch the hop must go on to the far wall")
+	_check(lift.spent and main.get("perch") == null, "a used perch must drop away")
+	_check(main.call("catchable_perch") == null, "a used perch cannot be caught again")
+	_clear_world()
+
+	# Waiting too long: the lift gives out and the player hops on by itself.
+	main.call("_spawn_perch", main.PERCH_STAND_Y - 100.0)
+	main.call("_on_tap")
+	_finish_hop()
+	_check(main.get("perch") != null, "second perch should be caught")
+	var waited := 0.0
+	while main.get("perch") != null and waited < 5.0:
+		main.call("_process", DT)
+		waited += DT
+	_check(absf(waited - Hazard.LIFT_HOLD) < 0.1, "perch should give out after %.1f s, took %.2f s" % [Hazard.LIFT_HOLD, waited])
+	_finish_hop()
+	_check(is_equal_approx(player.position.x, main.CLING_R), "after the perch gives out the player must be on the far wall")
+	_check(int(main.get("perch_landings")) == 2, "perch_landings should be 2")
+	_clear_world()
+
+	# Spacing: no new perch until the last one is surely gone, even at top speed
+	# with the player riding it for the full LIFT_HOLD.
+	var top_speed: float = main.BASE_SPEED + main.MAX_EXTRA_SPEED
+	# Both spawn at y=-100. Worst case: the first one is caught as late as possible
+	# and ridden to the end; the next must not come within 200 px before it is gone.
+	var busy: float = (main.PERCH_STAND_Y + main.PERCH_CATCH_BELOW + 100.0) + (Hazard.LIFT_HOLD + main.PERCH_FLY_TIME) * top_speed
+	var next_arrives: float = main.PERCH_STAND_Y - 200.0 + 100.0
+	_check(main.PERCH_SPACING + next_arrives >= busy, "PERCH_SPACING %.0f too small: perches could stack up" % main.PERCH_SPACING)
+	main.set("zone", 0)
+	main.set("distance", 5000.0)
+	main.call("_spawn_perch", -100.0)
+	_clear_world()
+	var perches := 0
+	for i in 300:
+		if (main.call("_next_pattern") as String).begins_with("perch"):
+			perches += 1
+	_check(perches == 0, "a perch pattern was picked %d times right after another perch" % perches)
+	main.set("distance", 5000.0 + main.PERCH_SPACING)
+	for i in 300:
+		if (main.call("_next_pattern") as String).begins_with("perch"):
+			perches += 1
+	_check(perches > 0, "perches never come back after the spacing")
+	main.call("_show_title")
 
 
 ## Continue after game over: price per use, limit, wallet, no double banking, protection.
@@ -305,6 +516,10 @@ func _start_run() -> void:
 	if run == 0:
 		_test_shop()
 		_test_fruit_trail()
+		_test_fruit_points()
+		_test_fruit_clearance()
+		_test_swoop()
+		_test_perch()
 		_test_continue()
 		_test_shop_taps()
 		_test_comfort()
@@ -321,6 +536,9 @@ func _start_run() -> void:
 	shake_frames = 0
 	bg_moved_frames = 0
 	center_fruit_ids = {}
+	fruit_checked = {}
+	trapped_fruit = 0
+	stacked_perch_frames = 0
 
 
 func _step() -> void:
@@ -341,10 +559,24 @@ func _step() -> void:
 		unfair_frames += 1
 
 	var world: Node2D = main.get("world")
+	var perch_ys: Array[float] = []
 	for c in world.get_children():
 		var h := c as Hazard
 		if h.is_queued_for_deletion():
 			continue
+		if h.kind == "perch" and not h.spent:
+			for py in perch_ys:
+				if absf(py - h.position.y) < 200.0:
+					stacked_perch_frames += 1
+			perch_ys.append(h.position.y)
+		if h.kind == "fruit" and not fruit_checked.has(h.get_instance_id()):
+			# New fruit must not sit on a hazard (fire is fine: it is only deadly while burning).
+			fruit_checked[h.get_instance_id()] = true
+			for o in world.get_children():
+				var oh := o as Hazard
+				if oh != h and oh.kind != "fire" and oh.kind != "fruit" and not oh.is_queued_for_deletion() \
+						and oh.motion == Hazard.Motion.NONE and oh.touches(h.position, 0.0):
+					trapped_fruit += 1
 		kinds_seen[h.kind] = true
 		motions_seen[h.motion] = true
 		if h.kind == "ball":
@@ -363,10 +595,14 @@ func _step() -> void:
 func _end_run() -> void:
 	var meters: float = main.call("meters")
 	var center_fruit := center_fruit_ids.size()
-	print("run %d: %.0f m, zones %s, kinds %s, center fruit %d, bot hits %d" % [
-		run, meters, str(zones_seen.keys()), str(kinds_seen.keys()), center_fruit, int(main.get("god_hits"))])
+	var landings := int(main.get("perch_landings"))
+	print("run %d: %.0f m, zones %s, kinds %s, center fruit %d, perch landings %d, bot hits %d" % [
+		run, meters, str(zones_seen.keys()), str(kinds_seen.keys()), center_fruit, landings, int(main.get("god_hits"))])
+	_check(landings >= 2, "run %d: the bot landed on only %d perches" % [run, landings])
+	_check(stacked_perch_frames == 0, "run %d: two perches stacked up in %d frames" % [run, stacked_perch_frames])
+	_check(trapped_fruit == 0, "run %d: %d fruit spawned on a hazard" % [run, trapped_fruit])
 	_check(zones_seen.size() == Zones.LIST.size(), "run %d reached only zones %s" % [run, str(zones_seen.keys())])
-	for k: String in ["saw", "spike", "fire", "ball", "fruit", "fireball"]:
+	for k: String in ["saw", "spike", "fire", "ball", "fruit", "fireball", "perch"]:
 		_check(kinds_seen.has(k), "run %d never spawned %s" % [run, k])
 	for m: int in [Hazard.Motion.SLIDE, Hazard.Motion.SWING, Hazard.Motion.FIRE, Hazard.Motion.SHOOT]:
 		_check(motions_seen.has(m), "run %d never used motion %d" % [run, m])
