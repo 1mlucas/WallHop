@@ -2,7 +2,7 @@
 
 ## Project
 One-tap pixel-art mobile game (portrait 720x1280, iOS first) built with Godot 4.x and GDScript.
-Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.3.1.
+Tap to hop to the opposite wall (or onto a perch in the middle), dodge saws and spikes, collect fruit. Current version: v0.4.
 
 ## About the owner
 - Not a game developer. QA/automation engineer (Java, Python) who wants Claude to write the code.
@@ -13,10 +13,12 @@ Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current v
 - `scenes/main.tscn` - entry scene, only holds the script
 - `scripts/main.gd` - game flow, player, spawning, collisions, UI (everything is built in code)
 - `scripts/zones.gd` - zone table (looks, start distance, pattern weights)
-- `scripts/hazard.gd` - scrolling hazard/fruit node: motion, hit capsule
+- `scripts/hazard.gd` - scrolling hazard/fruit/perch node: motion, hit capsule, fruit clearance
+- `scripts/fruit_layout.gd` - fruit placement shapes (scatter, wave, swoop, cluster)
 - `scripts/catalog.gd` - characters (shop prices, trail colours) and fruit values
 - `scripts/art.gd` - sprite sheet to SpriteFrames helper
 - `tests/sim_run.gd` - headless simulation + fairness test (must pass before a PR)
+- `tests/run_tests.sh` - runs sim_run.gd; trust this, not the Godot exit code (a parse error still exits 0)
 - `docs/GAME_DESIGN.md` - design doc: zones, fairness rules, ideas, roadmap
 - `assets/art/` - Pixel Adventure 1 sprites (Pixel Frog, CC0); `assets/art/chars/<id>/` holds one folder per character
 - `assets/audio/sfx`, `assets/audio/music` - OGG files (Juhani Junkala, CC0)
@@ -34,7 +36,7 @@ Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current v
 Godot 4.x can run headless, for example:
 `godot --headless --path . --quit-after 120`
 or with a simulation script: `godot --headless --path . --script path/to/sim.gd`
-Always run the project headless and `tests/sim_run.gd` after changing scripts, and tell the owner to press F5 to check visuals and feel.
+Always run the project headless and `tests/run_tests.sh` after changing scripts, and tell the owner to press F5 to check visuals and feel.
 
 ## Workflow per milestone
 Never commit straight to `main`; every change goes through a branch and a Pull Request.
@@ -48,5 +50,5 @@ Never commit straight to `main`; every change goes through a branch and a Pull R
 
 ## Roadmap
 See `docs/GAME_DESIGN.md` for the full roadmap.
-- next: pause, full-screen iPhone layout (safe area), balance from playtesting
+- next: fruit bandits (Pixel Adventure 2 enemies), double tap for a higher hop, pause, safe area
 - later: more hazards, settings, iOS export (Xcode + Apple Developer account), ads/IAP plugins

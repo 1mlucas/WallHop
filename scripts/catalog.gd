@@ -11,18 +11,22 @@ const CHARACTERS: Array[Dictionary] = [
 	{"id": "virtual_guy", "name": "VIRTUAL GUY", "price": 2500, "trail": Color(0.4, 0.8, 1.0)},
 ]
 
-## points: base value per fruit (multiplied by the combo). weight: how often it spawns.
-## Rarer fruit is worth more.
+## points: what one fruit is worth (fixed, no multiplier). weight: copies of it in
+## the fruit bag, so rarer fruit is worth more.
 const FRUITS: Dictionary = {
-	"apple": {"points": 5, "weight": 30},
-	"bananas": {"points": 5, "weight": 30},
-	"orange": {"points": 10, "weight": 20},
-	"cherries": {"points": 10, "weight": 20},
-	"kiwi": {"points": 15, "weight": 12},
-	"strawberry": {"points": 15, "weight": 12},
-	"pineapple": {"points": 25, "weight": 6},
-	"melon": {"points": 40, "weight": 3},
+	"apple": {"points": 5, "weight": 9},
+	"bananas": {"points": 8, "weight": 8},
+	"orange": {"points": 10, "weight": 7},
+	"cherries": {"points": 12, "weight": 6},
+	"kiwi": {"points": 15, "weight": 4},
+	"strawberry": {"points": 20, "weight": 3},
+	"pineapple": {"points": 30, "weight": 2},
+	"melon": {"points": 50, "weight": 1},
 }
+
+## Shuffle bag: every fruit appears exactly `weight` times per bag, in random order.
+## Feels fairer than a plain dice roll (no long droughts of rare fruit, no streaks).
+static var _bag: Array[String] = []
 
 
 static func character(id: String) -> Dictionary:
@@ -51,14 +55,23 @@ static func character_frames(id: String) -> SpriteFrames:
 	})
 
 
-## Picks a fruit name using the spawn weights.
+## Next fruit from the shuffle bag (refilled and shuffled when empty).
 static func pick_fruit() -> String:
+	if _bag.is_empty():
+		for k: String in FRUITS:
+			for i in int(FRUITS[k]["weight"]):
+				_bag.append(k)
+		_bag.shuffle()
+	return _bag.pop_back()
+
+
+## Size of a full bag: the sum of all weights.
+static func bag_size() -> int:
 	var total := 0
 	for k: String in FRUITS:
 		total += int(FRUITS[k]["weight"])
-	var roll := randi() % total
-	for k: String in FRUITS:
-		roll -= int(FRUITS[k]["weight"])
-		if roll < 0:
-			return k
-	return FRUITS.keys()[0]
+	return total
+
+
+static func reset_bag() -> void:
+	_bag.clear()

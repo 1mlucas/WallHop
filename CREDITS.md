@@ -4,7 +4,7 @@ All third-party assets used in this project are released under **CC0 (public dom
 
 ## Art
 - **Pixel Adventure 1** by Pixel Frog - <https://pixelfrog-assets.itch.io/pixel-adventure-1> (CC0)
-  - Used: Ninja Frog, Mask Dude, Pink Man, Virtual Guy, fruits, saw and chain, spikes, fire, spiked ball and chain, backgrounds (blue, green, brown, purple, gray), dust particle, volume / previous / next / play / restart / back / leaderboard / settings buttons
+  - Used: Ninja Frog, Mask Dude, Pink Man, Virtual Guy, fruits, saw and chain, spikes, fire, spiked ball and chain, backgrounds (blue, green, brown, purple, gray), dust particle, falling platform (perches), volume / previous / next / play / restart / back / leaderboard / settings buttons
 - **Pixel Adventure 2** by Pixel Frog - <https://pixelfrog-assets.itch.io/pixel-adventure-2> (CC0)
   - Used: 20 enemy sprites in `assets/art/enemies/` (not all are used in the game yet)
 

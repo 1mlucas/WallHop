@@ -7,8 +7,11 @@ enum Motion { NONE, SLIDE, SWING, FIRE, SHOOT }
 const FIRE_PERIOD := 2.4
 const FIRE_WARN := 0.45 # flicker time before burning; longer than a hop (0.36 s)
 const FIRE_BURN := 0.85
+const LIFT_HOLD := 2.0 # perch: seconds it carries the player before giving out
+const LIFT_WARN := 0.8 # perch: propeller stops and it warms up this long before
+const LIFT_HALF_W := 48.0 # perch: half width of the plank (32 px art at 3x)
 
-var kind := "" # saw, spike, fire, ball, fruit
+var kind := "" # saw, spike, fire, ball, fireball, fruit, perch
 var r := 0.0
 var half_len := 0.0
 var motion: Motion = Motion.NONE
@@ -28,12 +31,25 @@ var glow: Node2D
 var sparks: CPUParticles2D
 var last_dir := 0.0
 var clock := 0.0
+# Perch (a hovering lift in the middle of the shaft):
+var held := false # carrying (or about to carry) the player: parks at hold_y
+var hold_y := 0.0
+var hold_clock := 0.0 # seconds since the player landed on it
+var spent := false # already used: drops away
+var drop := true # spent perches fall; with reduced motion they only fade
+var fall_v := 0.0
+var lit := false # reachable with the next hop: drawn a bit brighter
+var drift := Vector2.ZERO # moving perch: how far it glides sideways (x) or up and down (y)
+var sink := 0.0 # sinking perch: px/s it carries the rider down the screen
 
 
 ## Moves the object down by `dy` and advances its own animation.
 func tick(delta: float, dy: float) -> void:
-	position.y += dy
 	clock += delta
+	if kind == "perch":
+		_tick_perch(delta, dy)
+		return
+	position.y += dy
 	var c := clock + phase
 	match motion:
 		Motion.SLIDE:
@@ -66,6 +82,32 @@ func tick(delta: float, dy: float) -> void:
 			last_dir = dir
 
 
+func _tick_perch(delta: float, dy: float) -> void:
+	var sprite := body as AnimatedSprite2D
+	if drift != Vector2.ZERO:
+		# A sine glide: slow at both ends, never a sudden turn. Keeps going while carrying the player.
+		sprite.position = drift * sin(TAU * (clock + phase) / period)
+	if held:
+		# Eases into place under the player, then hovers there (the world keeps scrolling).
+		hold_clock += delta
+		# A sinking perch keeps going down with the rider (eased by the same smoothing).
+		position.y = lerpf(position.y, hold_y + sink * hold_clock, 1.0 - exp(-12.0 * delta))
+		var warn := clampf((hold_clock - (LIFT_HOLD - LIFT_WARN)) / LIFT_WARN, 0.0, 1.0)
+		if warn > 0.0 and sprite.animation != &"off":
+			sprite.play(&"off")
+		# Slowly warms to orange (no blinking) so the player knows it is about to give out.
+		sprite.modulate = Color.WHITE.lerp(Color(1.0, 0.55, 0.35), warn)
+		return
+	position.y += dy
+	if spent:
+		if drop:
+			fall_v += 1400.0 * delta
+			position.y += fall_v * delta
+		modulate.a = maxf(0.0, modulate.a - delta * 2.5)
+		return
+	sprite.modulate = Color(1.25, 1.25, 1.1) if lit else Color.WHITE
+
+
 func _update_fire(t: float) -> void:
 	var anim := &"off"
 	if t < FIRE_WARN:
@@ -86,7 +128,7 @@ func hit_center() -> Vector2:
 
 
 func is_deadly() -> bool:
-	if kind == "fruit":
+	if kind == "fruit" or kind == "perch":
 		return false
 	if motion == Motion.FIRE:
 		return burning
@@ -99,3 +141,29 @@ func touches(p: Vector2, pr: float) -> bool:
 	var dy := maxf(0.0, absf(p.y - c.y) - half_len)
 	var rr := r + pr
 	return dx * dx + dy * dy < rr * rr
+
+
+## True if a fruit at `p` could ever overlap this object, counting its whole motion
+## range. Used to keep fruit clear of hazards so no fruit is a trap.
+func blocks(p: Vector2, margin: float) -> bool:
+	if kind == "fruit":
+		return false
+	if kind == "perch":
+		return absf(p.x - position.x) < LIFT_HALF_W + absf(drift.x) + margin \
+			and absf(p.y - position.y) < 15.0 + absf(drift.y) + margin
+	match motion:
+		Motion.SLIDE:
+			var dx := p.x - position.x
+			var dy := maxf(0.0, absf(p.y - position.y) - amp - half_len)
+			var rr := r + margin
+			return dx * dx + dy * dy < rr * rr
+		Motion.SWING:
+			return p.distance_to(position) < length + r + margin
+		Motion.SHOOT:
+			return absf(p.y - position.y) < r + margin
+	return touches(p, margin)
+
+
+## Perch: where the plank is right now (its base position plus its glide).
+func perch_point() -> Vector2:
+	return position + body.position

@@ -12,7 +12,7 @@ const LIST: Array[Dictionary] = [
 		"bg_tint": Color(1, 1, 1),
 		"color": Color(0.45, 0.75, 1.0), # zone dot on title / game over
 		"wall_tint": Color(1, 1, 1),
-		"patterns": {"saw": 3, "spikes": 3, "fruit": 2, "fruit_trail": 2},
+		"patterns": {"saw": 3, "spikes": 3, "fruit": 2, "fruit_trail": 2, "fruit_wave": 1, "fruit_swoop": 1, "perch": 1, "perch_slide": 2, "perch_sink": 1},
 	},
 	{
 		"name": "SAW MILL",
@@ -21,7 +21,7 @@ const LIST: Array[Dictionary] = [
 		"bg_tint": Color(1, 1, 1),
 		"color": Color(0.45, 0.85, 0.4), # zone dot on title / game over
 		"wall_tint": Color(0.85, 0.95, 0.85),
-		"patterns": {"saw": 2, "spikes": 1, "fruit": 1, "fruit_trail": 2, "saw_slide": 4, "zigzag": 2},
+		"patterns": {"saw": 2, "spikes": 1, "fruit": 1, "fruit_trail": 1, "fruit_wave": 1, "fruit_swoop": 1, "saw_slide": 4, "zigzag": 2, "perch_saws": 2, "perch_slide": 2, "perch_sink": 1, "perch_lift": 1},
 	},
 	{
 		"name": "HOT FORGE",
@@ -30,7 +30,7 @@ const LIST: Array[Dictionary] = [
 		"bg_tint": Color(1, 0.9, 0.85),
 		"color": Color(1.0, 0.5, 0.2), # zone dot on title / game over
 		"wall_tint": Color(1, 0.8, 0.7),
-		"patterns": {"spikes": 1, "fruit": 1, "fruit_trail": 1, "saw_slide": 1, "fire": 2, "fire_dual": 2, "fireball": 4},
+		"patterns": {"spikes": 1, "fruit": 1, "fruit_trail": 1, "fruit_swoop": 1, "saw_slide": 1, "fire": 2, "fire_dual": 2, "fireball": 4, "perch_saws": 1, "perch_slide": 1, "perch_sink": 1, "perch_lift": 1},
 	},
 	{
 		"name": "SKY GARDEN",
@@ -39,7 +39,7 @@ const LIST: Array[Dictionary] = [
 		"bg_tint": Color(1, 1, 1),
 		"color": Color(0.75, 0.5, 1.0), # zone dot on title / game over
 		"wall_tint": Color(0.9, 0.85, 1),
-		"patterns": {"saw": 1, "fruit_trail": 2, "zigzag": 2, "saw_slide": 1, "ball": 4, "sky_fruit": 1, "fireball": 2},
+		"patterns": {"saw": 1, "fruit_trail": 1, "fruit_wave": 1, "fruit_swoop": 1, "zigzag": 2, "saw_slide": 1, "ball": 4, "sky_fruit": 1, "fireball": 2, "perch_saws": 1, "perch_slide": 1, "perch_sink": 1, "perch_lift": 2},
 	},
 	{
 		"name": "NIGHT TOWER",
@@ -48,7 +48,7 @@ const LIST: Array[Dictionary] = [
 		"bg_tint": Color(0.55, 0.6, 0.8),
 		"color": Color(0.45, 0.5, 0.85), # zone dot on title / game over
 		"wall_tint": Color(0.6, 0.65, 0.85),
-		"patterns": {"saw": 1, "spikes": 1, "fruit": 1, "saw_slide": 2, "zigzag": 2, "fire": 1, "fire_dual": 2, "ball": 2, "sky_fruit": 1, "fruit_trail": 1, "fireball": 3},
+		"patterns": {"saw": 1, "spikes": 1, "fruit": 1, "saw_slide": 2, "zigzag": 2, "fire": 1, "fire_dual": 2, "ball": 2, "sky_fruit": 1, "fruit_trail": 1, "fruit_wave": 1, "fruit_swoop": 1, "fireball": 3, "perch_saws": 1, "perch_slide": 1, "perch_sink": 1, "perch_lift": 1},
 	},
 ]
 

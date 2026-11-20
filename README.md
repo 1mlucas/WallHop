@@ -15,7 +15,7 @@
 
 </div>
 
-Tap to hop to the opposite wall. Climb through five zones, dodge saws, spikes, fire and swinging spiked balls, chain fruit combos, beat your best score.
+Tap to hop to the opposite wall. Climb through five zones, land on hovering perches in the middle, dodge saws, spikes, fire and swinging spiked balls, collect fruit, beat your best score.
 
 ## Screenshots
 
@@ -31,7 +31,8 @@ Tap to hop to the opposite wall. Climb through five zones, dodge saws, spikes, f
 
 - 🐸 **One-tap controls**: a single tap flips you to the other wall, with a tap buffer for tight timing
 - 🗺️ **Five zones**: Meadow, Saw Mill, Hot Forge, Sky Garden, Night Tower, each with its own hazards
-- 🍎 **Fruit combos** and a shop with 4 characters, each with its own hop trail
+- 🛸 **Perches**: hovering lifts in the middle (still, sliding, sinking or elevator) to rest on, eat fruit and wait for hazards to pass
+- 🍎 **Natural fruit layouts** (trails, waves, swoops, clusters), 8 fruit with fixed values, and a shop with 4 characters, each with its own hop trail
 - ♿ **Comfort options**: reduced-motion mode, calm background, break reminder
 - 🧪 **Headless fairness test** that checks both walls are never deadly at once
 - 🎵 CC0 chiptune music and sound effects
@@ -44,8 +45,9 @@ Tap to hop to the opposite wall. Climb through five zones, dodge saws, spikes, f
 | v0.2 | Five zones (Meadow, Saw Mill, Hot Forge, Sky Garden, Night Tower) with sliding saws, fire jets, swinging spiked balls; fruit combo; landing dust; mute button; headless simulation test |
 | v0.3 | Icon-based title and game over screens, continue after game over (paid with fruit points), random fruit trails down the middle, smooth fireballs with glow and ember trail, score in the corner, fruit worth different points, character shop (4 characters, each with its own hop trail) |
 | v0.3.1 | Comfort pass: no screen shake, still background, calmer walls, shorter eased hops, lower top speed, soft pulses, reduced-motion option, break reminder |
+| v0.4 | Perches (hovering lifts) in the middle to land on: still, sliding left-right, sinking, or rising and falling like an elevator; fruit waves, swoops and clusters kept clear of hazards; shuffle-bag fruit; fixed fruit values 5-50, no combo |
 
-Planned: pause, full-screen iPhone layout, power-ups, missions, more zones, iOS release. See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md).
+Planned: fruit bandits (enemies), double tap for a higher hop, pause, full-screen iPhone layout, power-ups, missions, more zones, iOS release. See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md).
 
 ## Run it
 
@@ -60,7 +62,7 @@ Desktop controls: click or press Space, M toggles sound, Left/Right browse chara
 A headless simulation plays several long runs and checks the fairness rules (for example, both walls are never deadly at the same time):
 
 ```
-godot --headless --path . --script tests/sim_run.gd
+tests/run_tests.sh   # or: godot --headless --path . --script tests/sim_run.gd
 ```
 
 Exit code 0 means pass.
@@ -78,7 +80,8 @@ Exit code 0 means pass.
 │   ├── catalog.gd           characters (prices, trail colours) and fruit values
 │   └── art.gd               sprite-sheet to SpriteFrames helper
 ├── 🧪 tests
-│   └── sim_run.gd           headless simulation and fairness test
+│   ├── sim_run.gd           headless simulation and fairness test
+│   └── run_tests.sh         runs it; passes only on "PASS:"
 ├── 📖 docs
 │   └── GAME_DESIGN.md       zones, rules, ideas and roadmap
 ├── 🎨 assets
