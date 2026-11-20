@@ -544,23 +544,24 @@ func _test_fruit_tower() -> void:
 	main.call("_show_title")
 
 
-## Perch feedback: landing ghost, timer dots (3 steps, no blinking), landing press,
+## Perch feedback: landing arrow, timer dots (3 steps, no blinking), landing press,
 ## warning sound, hold time per zone.
 func _test_perch_feedback() -> void:
-	var ghost: Sprite2D = main.get("landing_ghost")
+	var marker: Node2D = main.get("landing_marker")
+	_check(not (marker is Sprite2D or marker is AnimatedSprite2D), "the landing marker must not look like the character")
 	main.call("_start_game")
 	main.set("since_row", -100000.0)
 	_clear_world()
 	main.call("_process", DT)
-	_check(not ghost.visible, "no landing ghost without a perch")
+	_check(not marker.visible, "no landing marker without a perch")
 	main.call("_spawn_perch", main.PERCH_STAND_Y - 120.0)
 	var lift := _first_perch()
 	main.call("_process", DT)
-	var feet: Vector2 = lift.perch_point() - Vector2(0, main.PERCH_FEET)
-	_check(ghost.visible and ghost.position.distance_to(feet) < 1.0, "landing ghost should stand on the reachable perch")
+	var spot: Vector2 = lift.perch_point() + main.LANDING_MARKER_OFFSET
+	_check(marker.visible and marker.position.distance_to(spot) < 1.0, "landing marker should sit on the reachable perch")
 	main.call("_on_tap")
 	main.call("_process", DT)
-	_check(not ghost.visible, "landing ghost hides while hopping")
+	_check(not marker.visible, "landing marker hides while hopping")
 	_finish_hop()
 	_check(lift.dots_left() == 3, "timer should show 3 dots after landing")
 	var changes := 0

@@ -6,6 +6,10 @@ and versions follow [Semantic Versioning](https://semver.org/) (pre-1.0: minor =
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-20
+### Changed
+- The perch landing hint is now a small still arrow on the plank instead of a faint copy of the character, which looked like a second character standing there.
+
 ## [0.4.1] - 2026-11-20
 ### Added
 - **Double tap**: a second tap early in a hop makes a high hop (rises 190 px, lands a little later). Once per hop; a late second tap still queues the next hop.
@@ -94,7 +98,8 @@ Comfort pass after playtesters reported dizziness, headaches, eye strain and nau
 - Score and saved best score, game over and retry.
 - Music and sound effects.
 
-[Unreleased]: https://github.com/1mlucas/WallHop/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/1mlucas/WallHop/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/1mlucas/WallHop/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/1mlucas/WallHop/compare/v0.4...v0.4.1
 [0.4]: https://github.com/1mlucas/WallHop/compare/v0.3.1...v0.4
 [0.3.1]: https://github.com/1mlucas/WallHop/compare/v0.3...v0.3.1

@@ -56,8 +56,9 @@ Hovering lifts (Pixel Adventure 1 "Falling Platform") in the middle of the shaft
 | Saw Mill onwards | with saws, sliding, sinking, elevator |
 
 ### Perch feedback (v0.4.1)
-- **Landing ghost**: while the player holds a wall and a perch is in reach, a faint
-  copy of the character stands on it, showing where the next hop lands.
+- **Landing arrow**: while the player holds a wall and a perch is in reach, a small
+  still arrow sits on the plank, showing where the next hop lands. (v0.4.1 showed a
+  faint copy of the character there; players read it as a second character.)
 - **Timer dots**: three small dots under the propeller; one goes out per third of
   the hold, and they turn orange in the last 0.8 s. Only 3 changes, no blinking.
 - **Landing press**: the plank dips about 8 px and springs back (off with reduced motion).
@@ -195,7 +196,8 @@ Ideas that use sprites already in Pixel Adventure 1 (CC0):
 | v0.3 | Middle fruit trails, bouncing fireballs, corner HUD, fruit values, character shop with hop trails |
 | v0.3.1 | Comfort pass against motion sickness and eye strain (see Comfort rules) |
 | v0.4 | Perches in the middle (still, sliding, sinking, elevator), natural fruit layouts, fixed fruit values (no combo) |
-| v0.4.1 | Double tap high hop, fruit towers, perch landing ghost, timer dots, landing press, sounds, hold time per zone |
+| v0.4.1 | Double tap high hop, fruit towers, perch landing hint, timer dots, landing press, sounds, hold time per zone |
+| v0.4.2 | Fix: landing hint is an arrow, not a copy of the character |
 | next | Fruit bandits (Pixel Adventure 2 enemies), double tap for a higher hop, pause, safe area |
 | later | Power-ups and missions, new zones (Ice Cave, Crusher Hall), settings screen |
 | v1.0 | iOS export, TestFlight, App Store |
