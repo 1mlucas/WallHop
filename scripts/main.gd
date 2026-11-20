@@ -6,6 +6,7 @@ const Art := preload("res://scripts/art.gd")
 const Zones := preload("res://scripts/zones.gd")
 const Hazard := preload("res://scripts/hazard.gd")
 const Catalog := preload("res://scripts/catalog.gd")
+const FruitLayout := preload("res://scripts/fruit_layout.gd")
 
 enum Mode { TITLE, PLAY, DEAD }
 
@@ -27,7 +28,6 @@ const PLAYER_R := 24.0
 const BASE_SPEED := 280.0
 const MAX_EXTRA_SPEED := 140.0 # top scroll speed 420 px/s (was 540)
 const BREATHER := 450.0 # empty space after a zone change
-const MAX_COMBO := 5
 const SAVE_PATH := "user://wallhop.cfg"
 
 const SFX_NAMES := ["jump", "wall_jump", "fruit", "hit", "click", "highscore"]
@@ -56,6 +56,15 @@ const TRAIL_EVERY := 0.03
 # Middle fruit trails: fruit stays out of reach of a player holding a wall.
 const TRAIL_HALF_WIDTH := 110.0
 const TRAIL_MIN_STEP_X := 80.0
+const FRUIT_CLEARANCE := 40.0 # fruit keeps this far from any hazard's reach
+const FRUIT_LANE_MARGIN := 70.0 # middle fruit stays out of reach from the walls
+# Perches: hovering lifts in the middle. Hop onto one, rest, hop on to the far wall.
+const PERCH_STAND_Y := PLAYER_Y + 60.0 # where a perch parks under the player's feet
+const PERCH_CATCH_ABOVE := 220.0 # a hop reaches perches this far above the parking spot...
+const PERCH_CATCH_BELOW := 40.0 # ...and this far below it
+const PERCH_FLY_TIME := 0.28 # half a hop: wall to middle or middle to wall
+const PERCH_ARC := 40.0
+const PERCH_SPACING := 1300.0 # px of climb between two perches, so they never stack up
 
 var mode: Mode = Mode.TITLE
 var flying := false
@@ -63,6 +72,12 @@ var on_left := true
 var fly_t := 0.0
 var fly_from := 0.0
 var fly_to := 0.0
+var fly_dur := FLY_TIME
+var fly_arc := ARC
+var perch: Hazard = null # the lift the player stands on
+var perch_target: Hazard = null # the lift the current hop is heading for
+var last_perch_at := -100000.0 # distance when the last perch spawned
+var perch_landings := 0 # this run, for tests
 var buffered := false
 
 var speed := 0.0
@@ -70,7 +85,6 @@ var distance := 0.0
 var scroll := 0.0
 var since_row := 0.0
 var zone := 0
-var combo := 0
 var fruit_count := 0
 var fruit_points := 0
 var score := 0
@@ -119,6 +133,7 @@ var ember_ramp: Gradient
 var spark_ramp: Gradient
 var shrink_curve: Curve
 var fruit_frames := {}
+var perch_frames: SpriteFrames
 var spike_tex: Texture2D
 var saw_chain_tex: Texture2D
 var ball_tex: Texture2D
@@ -130,7 +145,6 @@ var dim: ColorRect
 var hud: Control
 var score_label: Label
 var fruit_label: Label
-var combo_label: Label
 var title_screen: Control
 var over_screen: Control
 var title_label: Label
@@ -202,6 +216,10 @@ func _build_art() -> void:
 	ball_tex = load("res://assets/art/spiked_ball.png")
 	ball_chain_tex = load("res://assets/art/ball_chain.png")
 	dust_tex = load("res://assets/art/dust.png")
+	perch_frames = Art.build({
+		"on": {"path": "res://assets/art/perch_on.png", "w": 32, "h": 10, "fps": 16.0},
+		"off": {"path": "res://assets/art/perch_off.png", "w": 32, "h": 10, "fps": 1.0},
+	})
 	for z: Dictionary in Zones.LIST:
 		bg_textures[z["bg"]] = load(z["bg"])
 
@@ -469,7 +487,7 @@ func _build_over_screen(layer: CanvasLayer) -> void:
 	over_screen.add_child(back)
 
 
-## Top-left corner: score, fruit count and combo, so the middle stays clear for fruit.
+## Top-left corner: score and fruit points, so the middle stays clear for fruit.
 func _build_hud(layer: CanvasLayer) -> void:
 	hud = Control.new()
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -488,8 +506,6 @@ func _build_hud(layer: CanvasLayer) -> void:
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(icon)
 	fruit_label = _make_corner_label("0", 40, Vector2(86, 108))
-	combo_label = _make_corner_label("", 34, Vector2(28, 182))
-	combo_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
 
 
 ## Character picker: preview, arrows to browse, price (apple + number) when locked.
@@ -701,7 +717,8 @@ func _start_game() -> void:
 		c.queue_free()
 	distance = 0.0
 	since_row = 0.0
-	combo = 0
+	last_perch_at = -100000.0
+	perch_landings = 0
 	fruit_count = 0
 	fruit_points = 0
 	banked = 0
@@ -716,7 +733,6 @@ func _start_game() -> void:
 	mode = Mode.PLAY
 	score_label.text = "0"
 	fruit_label.text = "0"
-	combo_label.visible = false
 	hud.visible = true
 	title_screen.visible = false
 	over_screen.visible = false
@@ -726,6 +742,8 @@ func _start_game() -> void:
 
 func _reset_player() -> void:
 	flying = false
+	perch = null
+	perch_target = null
 	on_left = true
 	player.rotation = 0.0
 	player.position = Vector2(CLING_L, PLAYER_Y)
@@ -859,9 +877,9 @@ func _revive() -> void:
 	for c in world.get_children():
 		c.queue_free()
 	since_row = -BREATHER
-	combo = 0
-	combo_label.visible = false
 	flying = false
+	perch = null
+	perch_target = null
 	buffered = false
 	player.rotation = 0.0
 	player.position = Vector2(_cling_x(on_left), PLAYER_Y)
@@ -1001,13 +1019,31 @@ func _back_to_title() -> void:
 	_show_title()
 
 
+## Starts a hop. From a wall it goes to the other wall, or stops halfway on a
+## perch when one is in reach. From a perch it goes on to the wall it was heading for.
 func _begin_jump() -> void:
 	flying = true
 	buffered = false
 	fly_t = 0.0
 	fly_from = player.position.x
-	on_left = not on_left
-	fly_to = CLING_L if on_left else CLING_R
+	if perch:
+		_release_perch()
+		fly_to = _cling_x(on_left)
+		fly_dur = PERCH_FLY_TIME
+		fly_arc = PERCH_ARC
+	else:
+		on_left = not on_left
+		perch_target = catchable_perch()
+		if perch_target:
+			perch_target.held = true
+			perch_target.lit = false
+			fly_to = W * 0.5
+			fly_dur = PERCH_FLY_TIME
+			fly_arc = PERCH_ARC
+		else:
+			fly_to = _cling_x(on_left)
+			fly_dur = FLY_TIME
+			fly_arc = ARC
 	player.flip_h = on_left
 	player.play("spin")
 	trail_timer = 0.0
@@ -1017,13 +1053,44 @@ func _begin_jump() -> void:
 func _land() -> void:
 	flying = false
 	player.position = Vector2(fly_to, PLAYER_Y)
-	player.flip_h = not on_left
-	player.play("wall")
-	_sfx("wall_jump")
-	_spawn_dust()
+	if perch_target:
+		perch = perch_target
+		perch_target = null
+		perch.hold_clock = 0.0
+		perch_landings += 1
+		player.flip_h = on_left # keep facing the wall it will hop to next
+		player.play("idle")
+		_sfx("wall_jump")
+		_spawn_dust(Vector2(player.position.x, PLAYER_Y + 44.0), Vector2.UP)
+	else:
+		player.flip_h = not on_left
+		player.play("wall")
+		_sfx("wall_jump")
+		var side := -1.0 if on_left else 1.0
+		_spawn_dust(Vector2(player.position.x + side * 30.0, PLAYER_Y + 20.0), Vector2(-side, 0))
 	if buffered:
 		buffered = false
 		_begin_jump()
+
+
+## The perch the next hop from a wall would land on, or null.
+func catchable_perch() -> Hazard:
+	for c in world.get_children():
+		var h := c as Hazard
+		if h.kind != "perch" or h.held or h.spent or h.is_queued_for_deletion():
+			continue
+		var dy := h.position.y - PERCH_STAND_Y
+		if dy >= -PERCH_CATCH_ABOVE and dy <= PERCH_CATCH_BELOW:
+			return h
+	return null
+
+
+## The player leaves the perch: it is used up and drops away.
+func _release_perch() -> void:
+	perch.held = false
+	perch.spent = true
+	perch.drop = not reduced_motion
+	perch = null
 
 
 # ---------------------------------------------------------------- update
@@ -1077,22 +1144,24 @@ func _update_play(delta: float) -> void:
 		_enter_zone(z, false)
 
 	if flying:
-		fly_t += delta / FLY_TIME
+		fly_t += delta / fly_dur
 		var t := minf(fly_t, 1.0)
 		# Smoothstep: no sudden start or stop, so the eyes can follow the hop.
 		player.position.x = lerpf(fly_from, fly_to, t * t * (3.0 - 2.0 * t))
-		player.position.y = PLAYER_Y - sin(t * PI) * ARC
+		player.position.y = PLAYER_Y - sin(t * PI) * fly_arc
 		trail_timer -= delta
 		if trail_timer <= 0.0 and not reduced_motion:
 			trail_timer = TRAIL_EVERY
 			_spawn_ghost()
 		if fly_t >= 1.0:
 			_land()
+	elif perch and perch.hold_clock >= Hazard.LIFT_HOLD:
+		_begin_jump() # the lift gives out: the player hops on to the next wall
 
 	since_row += dy
 	var gap := lerpf(460.0, 340.0, clampf(distance / 20000.0, 0.0, 1.0))
 	if since_row >= gap:
-		since_row = -_spawn_pattern(Zones.pick_pattern(zone), -100.0)
+		since_row = -_spawn_pattern(_next_pattern(), -100.0)
 
 	for c in fx.get_children():
 		(c as Node2D).position.y += dy
@@ -1105,9 +1174,10 @@ func _update_play(delta: float) -> void:
 		if h.position.y > H + 400.0:
 			h.queue_free()
 			continue
-		if h.kind == "fruit" and not h.passed and h.position.y > PLAYER_Y + 120.0:
-			h.passed = true
-			_break_combo()
+		if h.kind == "perch":
+			# Shine when the next hop would land on it.
+			h.lit = not h.held and not h.spent and perch == null and not flying and h == catchable_perch()
+			continue
 		if h.touches(player.position, PLAYER_R):
 			if h.kind == "fruit":
 				_collect(h)
@@ -1153,8 +1223,19 @@ func deadly_walls() -> Array[bool]:
 
 ## Spawns one pattern with its lowest point at `y`. Returns the extra height it
 ## uses above `y`, so the next row keeps a full gap after it.
+## Picks the next pattern for the zone, keeping perches far enough apart.
+func _next_pattern() -> String:
+	for i in 8:
+		var p := Zones.pick_pattern(zone)
+		if not p.begins_with("perch") or distance - last_perch_at >= PERCH_SPACING:
+			return p
+	return "fruit_trail"
+
+
 func _spawn_pattern(pattern: String, y: float) -> float:
 	var left := randf() < 0.5
+	var lo := CLING_L + FRUIT_LANE_MARGIN
+	var hi := CLING_R - FRUIT_LANE_MARGIN
 	match pattern:
 		"saw":
 			_spawn_saw(left, y)
@@ -1186,32 +1267,62 @@ func _spawn_pattern(pattern: String, y: float) -> float:
 			return 230.0
 		"fruit_trail":
 			# Fruit scattered at random down the middle: hop back and forth to collect it.
-			var n := randi_range(4, 6)
-			var lo := W * 0.5 - TRAIL_HALF_WIDTH
-			var hi := W * 0.5 + TRAIL_HALF_WIDTH
-			var fy := y
-			var last_x := randf_range(lo, hi)
+			var pts := FruitLayout.scatter(randi_range(4, 6), W * 0.5 - TRAIL_HALF_WIDTH,
+				W * 0.5 + TRAIL_HALF_WIDTH, y, TRAIL_MIN_STEP_X)
+			return _place_fruit(pts, y)
+		"fruit_wave":
+			# A gentle snake down the middle.
+			var pts := FruitLayout.wave(randi_range(5, 7), W * 0.5, randf_range(60.0, 110.0), y,
+				randf_range(110.0, 150.0), lo, hi)
+			return _place_fruit(pts, y)
+		"fruit_swoop":
+			# A diagonal ribbon that one well-timed hop collects in a single sweep.
+			var ts: Array[float] = []
+			var n := randi_range(3, 4)
 			for i in n:
-				var x := last_x
-				if i > 0:
-					# Keep neighbours apart so it never collapses into a straight column.
-					x = randf_range(lo, hi)
-					if absf(x - last_x) < TRAIL_MIN_STEP_X:
-						var dir := 1.0 if last_x < W * 0.5 else -1.0
-						x = clampf(last_x + dir * randf_range(TRAIL_MIN_STEP_X, TRAIL_HALF_WIDTH * 2.0), lo, hi)
-					fy -= randf_range(120.0, 220.0)
-				_spawn_fruit(Vector2(x, fy))
-				last_x = x
-			return y - fy
+				ts.append(lerpf(0.3, 0.7, float(i) / float(n - 1)) + randf_range(-0.02, 0.02))
+			var from_x := _cling_x(left)
+			var pts := FruitLayout.swoop(from_x, _cling_x(not left), y, ts, speed, FLY_TIME, ARC)
+			return _place_fruit(pts, y)
+		"perch":
+			# A lift to rest on, with a few fruit above it to eat while riding.
+			_spawn_perch(y)
+			var pts := FruitLayout.wave(3, W * 0.5, 22.0, y - 260.0, 120.0, lo, hi)
+			return _place_fruit(pts, y)
+		"perch_saws":
+			# Saws on both walls, one after the other: wait on the lift until they pass.
+			_spawn_perch(y)
+			_spawn_saw(left, y - 40.0)
+			_spawn_saw(not left, y - 300.0)
+			return 300.0
 		"fireball":
 			_spawn_fireball(y)
 		"sky_fruit":
-			for i in 3:
-				_spawn_fruit(Vector2(W * 0.5 + (i - 1) * 90.0, y - absf(i - 1) * 30.0))
-			return 30.0
+			# A loose sunflower cluster of fruit.
+			var pts := FruitLayout.cluster(Vector2(W * 0.5, y - 100.0), randi_range(4, 6), 100.0)
+			return _place_fruit(pts, y)
 		_:
 			push_error("Unknown pattern: %s" % pattern)
 	return 0.0
+
+
+## Spawns fruit at the points that are clear of every hazard (counting their whole
+## swing or slide). Returns the height used above `y`.
+func _place_fruit(pts: Array[Vector2], y: float) -> float:
+	var top := y
+	for p in pts:
+		top = minf(top, p.y)
+		if fruit_spot_free(p):
+			_spawn_fruit(p)
+	return y - top
+
+
+func fruit_spot_free(p: Vector2) -> bool:
+	for c in world.get_children():
+		var h := c as Hazard
+		if not h.is_queued_for_deletion() and h.blocks(p, FRUIT_CLEARANCE):
+			return false
+	return true
 
 
 func _cling_x(left: bool) -> float:
@@ -1377,6 +1488,18 @@ func _spawn_fireball(y: float) -> void:
 	h.tick(0.0, 0.0)
 
 
+func _spawn_perch(y: float) -> void:
+	var h := _make_hazard("perch", Vector2(W * 0.5, y), 0.0)
+	h.hold_y = PERCH_STAND_Y
+	var s := AnimatedSprite2D.new()
+	s.sprite_frames = perch_frames
+	s.scale = Vector2(S, S)
+	s.play("on")
+	h.add_child(s)
+	h.body = s
+	last_perch_at = distance
+
+
 func _spawn_fruit(pos: Vector2) -> void:
 	var key := Catalog.pick_fruit()
 	var h := _make_hazard("fruit", pos, 34.0)
@@ -1390,10 +1513,10 @@ func _spawn_fruit(pos: Vector2) -> void:
 
 # ---------------------------------------------------------------- fruit and effects
 
+## Each fruit is worth its own fixed points (see Catalog.FRUITS), no multiplier.
 func _collect(fruit: Hazard) -> void:
-	combo = mini(combo + 1, MAX_COMBO)
 	fruit_count += 1
-	var pts := fruit.value * combo
+	var pts := fruit.value
 	fruit_points += pts
 	fruit_label.text = str(fruit_points)
 	_sfx("fruit")
@@ -1405,15 +1528,7 @@ func _collect(fruit: Hazard) -> void:
 	pop.play("pop")
 	pop.animation_finished.connect(pop.queue_free)
 	_float_text("+%d" % pts, fruit.position)
-	if combo >= 2:
-		combo_label.text = "COMBO x%d" % combo
-		combo_label.visible = true
 	fruit.queue_free()
-
-
-func _break_combo() -> void:
-	combo = 0
-	combo_label.visible = false
 
 
 func _float_text(text: String, pos: Vector2) -> void:
@@ -1452,16 +1567,16 @@ func _spawn_ghost() -> void:
 	tw.chain().tween_callback(g.queue_free)
 
 
-func _spawn_dust() -> void:
-	var side := -1.0 if on_left else 1.0
-	var origin := Vector2(player.position.x + side * 30.0, PLAYER_Y + 20.0)
+## Small puffs at `origin`, drifting along `away` (off the wall, or up off a perch).
+func _spawn_dust(origin: Vector2, away: Vector2) -> void:
+	var across := Vector2(away.y, away.x) # spread sideways to the drift
 	for i in 4:
 		var d := Sprite2D.new()
 		d.texture = dust_tex
 		d.scale = Vector2(1.5, 1.5)
-		d.position = origin + Vector2(0, randf_range(-20.0, 20.0))
+		d.position = origin + across * randf_range(-20.0, 20.0)
 		fx.add_child(d)
-		var target := d.position + Vector2(-side * randf_range(20.0, 50.0), randf_range(-40.0, 10.0))
+		var target := d.position + away * randf_range(20.0, 50.0) + across * randf_range(-25.0, 25.0)
 		var tw := d.create_tween().set_parallel()
 		tw.tween_property(d, "position", target, 0.35)
 		tw.tween_property(d, "scale", Vector2(2.5, 2.5), 0.35)
