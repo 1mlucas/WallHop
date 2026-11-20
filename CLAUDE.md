@@ -18,6 +18,7 @@ Tap to hop to the opposite wall (or onto a perch in the middle), dodge saws and 
 - `scripts/catalog.gd` - characters (shop prices, trail colours) and fruit values
 - `scripts/art.gd` - sprite sheet to SpriteFrames helper
 - `tests/sim_run.gd` - headless simulation + fairness test (must pass before a PR)
+- `tests/run_tests.sh` - runs sim_run.gd; trust this, not the Godot exit code (a parse error still exits 0)
 - `docs/GAME_DESIGN.md` - design doc: zones, fairness rules, ideas, roadmap
 - `assets/art/` - Pixel Adventure 1 sprites (Pixel Frog, CC0); `assets/art/chars/<id>/` holds one folder per character
 - `assets/audio/sfx`, `assets/audio/music` - OGG files (Juhani Junkala, CC0)
@@ -35,7 +36,7 @@ Tap to hop to the opposite wall (or onto a perch in the middle), dodge saws and 
 Godot 4.x can run headless, for example:
 `godot --headless --path . --quit-after 120`
 or with a simulation script: `godot --headless --path . --script path/to/sim.gd`
-Always run the project headless and `tests/sim_run.gd` after changing scripts, and tell the owner to press F5 to check visuals and feel.
+Always run the project headless and `tests/run_tests.sh` after changing scripts, and tell the owner to press F5 to check visuals and feel.
 
 ## Workflow per milestone
 Never commit straight to `main`; every change goes through a branch and a Pull Request.

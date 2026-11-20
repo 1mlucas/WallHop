@@ -43,6 +43,19 @@ Hovering lifts (Pixel Adventure 1 "Falling Platform") in the middle of the shaft
   1300 px of climb apart, so two of them never stack up.
 - Patterns: `perch` (lift + small fruit column above), `perch_saws` (saws on both
   walls one after the other: wait on the lift until they pass).
+- **Moving perches**: `perch_slide` glides 90 px left and right of the middle,
+  `perch_lift` rises and sinks 60 px (an elevator). Both use a slow sine glide
+  (3.0-3.6 s per cycle: slow at the ends, no sudden turns). The hop follows the
+  plank wherever it is, the rider moves with it, and the hop off always ends on a
+  wall at the usual height. Reduced motion halves the glide.
+
+| Zone | Perch types |
+|------|-------------|
+| Meadow | still |
+| Saw Mill | still, with saws, sliding |
+| Hot Forge | still, with saws, sliding, elevator |
+| Sky Garden | still, with saws, sliding, elevator (more elevators) |
+| Night Tower | all |
 
 ## Fruit layouts (v0.4, `scripts/fruit_layout.gd`)
 Fruit should look hand-placed but differ every run:
@@ -155,7 +168,7 @@ Ideas that use sprites already in Pixel Adventure 1 (CC0):
 | v0.2 | Zones 1-5, moving / switching / swinging hazards, fruit combo, landing dust, mute button, headless simulation test |
 | v0.3 | Middle fruit trails, bouncing fireballs, corner HUD, fruit values, character shop with hop trails |
 | v0.3.1 | Comfort pass against motion sickness and eye strain (see Comfort rules) |
-| v0.4 | Perches in the middle, natural fruit layouts, fixed fruit values (no combo) |
+| v0.4 | Perches in the middle (still, sliding, elevator), natural fruit layouts, fixed fruit values (no combo) |
 | next | Fruit bandits (Pixel Adventure 2 enemies), double tap for a higher hop, pause, safe area |
 | later | Power-ups and missions, new zones (Ice Cave, Crusher Hall), settings screen |
 | v1.0 | iOS export, TestFlight, App Store |
