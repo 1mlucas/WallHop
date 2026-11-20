@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (pre-1.0: minor = milestone, patch = fixes and polish).
 
 ## [Unreleased]
+
+## [0.4.2] - 2026-11-20
 ### Changed
 - The perch landing hint is now a small still arrow on the plank instead of a faint copy of the character, which looked like a second character standing there.
 
@@ -96,7 +98,8 @@ Comfort pass after playtesters reported dizziness, headaches, eye strain and nau
 - Score and saved best score, game over and retry.
 - Music and sound effects.
 
-[Unreleased]: https://github.com/1mlucas/WallHop/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/1mlucas/WallHop/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/1mlucas/WallHop/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/1mlucas/WallHop/compare/v0.4...v0.4.1
 [0.4]: https://github.com/1mlucas/WallHop/compare/v0.3.1...v0.4
 [0.3.1]: https://github.com/1mlucas/WallHop/compare/v0.3...v0.3.1
