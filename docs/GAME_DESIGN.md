@@ -56,8 +56,9 @@ Hovering lifts (Pixel Adventure 1 "Falling Platform") in the middle of the shaft
 | Saw Mill onwards | with saws, sliding, sinking, elevator |
 
 ### Perch feedback (v0.4.1)
-- **Landing ghost**: while the player holds a wall and a perch is in reach, a faint
-  copy of the character stands on it, showing where the next hop lands.
+- **Landing arrow**: while the player holds a wall and a perch is in reach, a small
+  still arrow sits on the plank, showing where the next hop lands. (v0.4.1 showed a
+  faint copy of the character there; players read it as a second character.)
 - **Timer dots**: three small dots under the propeller; one goes out per third of
   the hold, and they turn orange in the last 0.8 s. Only 3 changes, no blinking.
 - **Landing press**: the plank dips about 8 px and springs back (off with reduced motion).

@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/) (pre-1.0: minor = milestone, patch = fixes and polish).
 
 ## [Unreleased]
+### Changed
+- The perch landing hint is now a small still arrow on the plank instead of a faint copy of the character, which looked like a second character standing there.
 
 ## [0.4.1] - 2026-11-20
 ### Added

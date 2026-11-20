@@ -77,6 +77,7 @@ const HIGH_ARC := 190.0
 const HIGH_ARC_REDUCED := 140.0
 const HIGH_FLY_TIME := 0.46 # the rest of the hop after the boost
 const HIGH_REACH := 150.0 # a high hop lands on perches this much further up
+const LANDING_MARKER_OFFSET := Vector2(0, -34) # arrow just above the plank
 const TOWER_STEP := 75.0 # fruit tower: vertical gap between fruit
 
 var mode: Mode = Mode.TITLE
@@ -95,7 +96,7 @@ var perch_landings := 0 # this run, for tests
 var boosted := false # this hop already used its double tap
 var hop_from_wall := false # this hop started on a wall (not on a perch)
 var high_hops := 0 # this run, for tests
-var landing_ghost: Sprite2D # faint copy of the player on the perch the next hop would land on
+var landing_marker: Node2D # small arrow on the perch the next hop would land on
 var buffered := false
 
 var speed := 0.0
@@ -311,11 +312,19 @@ func _build_background() -> void:
 
 
 func _build_player() -> void:
-	landing_ghost = Sprite2D.new()
-	landing_ghost.scale = Vector2(S, S)
-	landing_ghost.modulate = Color(1, 1, 1, 0.35)
-	landing_ghost.visible = false
-	add_child(landing_ghost)
+	# A small still arrow, not a copy of the character (a copy looked like a second player).
+	landing_marker = Node2D.new()
+	var outline := Polygon2D.new()
+	outline.polygon = PackedVector2Array([Vector2(-12, -8), Vector2(12, -8), Vector2(0, 7)])
+	outline.color = Color(0.15, 0.12, 0.2, 0.85)
+	landing_marker.add_child(outline)
+	var arrow := Polygon2D.new()
+	arrow.polygon = PackedVector2Array([Vector2(-8, -5), Vector2(8, -5), Vector2(0, 3)])
+	arrow.color = Color(1.0, 0.95, 0.6)
+	landing_marker.add_child(arrow)
+	landing_marker.scale = Vector2(1.5, 1.5)
+	landing_marker.visible = false
+	add_child(landing_marker)
 	player = AnimatedSprite2D.new()
 	player.sprite_frames = Catalog.character_frames(selected)
 	player.scale = Vector2(S, S)
@@ -1261,19 +1270,17 @@ func _update_play(delta: float) -> void:
 		# Ride along with the perch (it may glide sideways or up and down); done after
 		# the perch moved this frame so the feet never slip on the plank.
 		player.position = perch.perch_point() - Vector2(0, PERCH_FEET)
-	_update_landing_ghost()
+	_update_landing_marker()
 
 
-## Shows a faint copy of the player where the next hop would land on a perch.
-func _update_landing_ghost() -> void:
+## Shows a small arrow on the perch the next hop would land on.
+func _update_landing_marker() -> void:
 	var p: Hazard = null
 	if mode == Mode.PLAY and not flying and perch == null:
 		p = catchable_perch()
-	landing_ghost.visible = p != null
+	landing_marker.visible = p != null
 	if p:
-		landing_ghost.texture = player.sprite_frames.get_frame_texture("idle", 0)
-		landing_ghost.flip_h = on_left # the hop will face away from this wall
-		landing_ghost.position = p.perch_point() - Vector2(0, PERCH_FEET)
+		landing_marker.position = p.perch_point() + LANDING_MARKER_OFFSET
 
 
 ## Softly fades the player in and out while the post-continue protection lasts
