@@ -47,6 +47,8 @@ Tap to hop to the opposite wall. Climb through five zones, land on hovering perc
 | v0.3.1 | Comfort pass: no screen shake, still background, calmer walls, shorter eased hops, lower top speed, soft pulses, reduced-motion option, break reminder |
 | v0.4 | Perches (hovering lifts) in the middle to land on: still, sliding left-right, sinking, or rising and falling like an elevator; fruit waves, swoops and clusters kept clear of hazards; shuffle-bag fruit; fixed fruit values 5-50, no combo |
 
+Full history: [CHANGELOG.md](CHANGELOG.md).
+
 Planned: fruit bandits (enemies), double tap for a higher hop, pause, full-screen iPhone layout, power-ups, missions, more zones, iOS release. See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md).
 
 ## Run it
