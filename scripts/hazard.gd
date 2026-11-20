@@ -40,6 +40,7 @@ var drop := true # spent perches fall; with reduced motion they only fade
 var fall_v := 0.0
 var lit := false # reachable with the next hop: drawn a bit brighter
 var drift := Vector2.ZERO # moving perch: how far it glides sideways (x) or up and down (y)
+var sink := 0.0 # sinking perch: px/s it carries the rider down the screen
 
 
 ## Moves the object down by `dy` and advances its own animation.
@@ -88,8 +89,9 @@ func _tick_perch(delta: float, dy: float) -> void:
 		sprite.position = drift * sin(TAU * (clock + phase) / period)
 	if held:
 		# Eases into place under the player, then hovers there (the world keeps scrolling).
-		position.y = lerpf(position.y, hold_y, 1.0 - exp(-12.0 * delta))
 		hold_clock += delta
+		# A sinking perch keeps going down with the rider (eased by the same smoothing).
+		position.y = lerpf(position.y, hold_y + sink * hold_clock, 1.0 - exp(-12.0 * delta))
 		var warn := clampf((hold_clock - (LIFT_HOLD - LIFT_WARN)) / LIFT_WARN, 0.0, 1.0)
 		if warn > 0.0 and sprite.animation != &"off":
 			sprite.play(&"off")

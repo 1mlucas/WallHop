@@ -358,7 +358,31 @@ func _test_perch() -> void:
 	_check(perches > 0, "perches never come back after the spacing")
 	_test_moving_perch("perch_slide", Vector2(main.PERCH_SLIDE, 0.0))
 	_test_moving_perch("perch_lift", Vector2(0.0, main.PERCH_RISE))
+	_test_sinking_perch()
 	main.call("_show_title")
+
+
+## Sinking perch: carries the rider down the screen, stays above the bottom, and the
+## hop off (or the automatic one) ends on a wall at PLAYER_Y.
+func _test_sinking_perch() -> void:
+	var player: Node2D = main.get("player")
+	main.call("_start_game")
+	main.set("since_row", -100000.0)
+	_clear_world()
+	main.call("_spawn_pattern", "perch_sink", main.PERCH_STAND_Y - 120.0)
+	main.call("_on_tap")
+	_finish_hop()
+	_check(main.get("perch") != null, "perch_sink: the hop should land on it")
+	var start_y := player.position.y
+	var lowest := start_y
+	while main.get("perch") != null:
+		main.call("_process", DT)
+		lowest = maxf(lowest, player.position.y)
+	_check(lowest - start_y > main.PERCH_SINK * 1.2, "perch_sink: rider should go down (%.0f px)" % (lowest - start_y))
+	_check(lowest < main.H - 150.0, "perch_sink: rider went too low (y=%.0f)" % lowest)
+	_finish_hop()
+	_check(player.position.y == main.PLAYER_Y, "perch_sink: the hop off must end at PLAYER_Y")
+	_clear_world()
 
 
 ## Moving perches: the hop lands on the plank wherever it is, the player rides

@@ -66,8 +66,9 @@ const PERCH_FLY_TIME := 0.28 # half a hop: wall to middle or middle to wall
 const PERCH_ARC := 40.0
 const PERCH_SPACING := 1300.0 # px of climb between two perches, so they never stack up
 const PERCH_FEET := PERCH_STAND_Y - PLAYER_Y # player centre above the plank
-const PERCH_SLIDE := 90.0 # sliding perch: glides this far left and right of the middle
-const PERCH_RISE := 60.0 # elevator perch: rises and sinks this far
+const PERCH_SLIDE := 110.0 # sliding perch: glides this far left and right of the middle
+const PERCH_RISE := 90.0 # elevator perch: rises and sinks this far
+const PERCH_SINK := 80.0 # sinking perch: carries the rider down this many px/s
 const PERCH_GLIDE_PERIOD := Vector2(3.0, 3.6) # seconds for one full glide (random in range)
 
 var mode: Mode = Mode.TITLE
@@ -1321,6 +1322,12 @@ func _spawn_pattern(pattern: String, y: float) -> float:
 			_spawn_perch(y, Vector2(PERCH_SLIDE, 0.0))
 			var pts := FruitLayout.wave(3, W * 0.5, PERCH_SLIDE * 0.6, y - 280.0, 120.0, lo, hi)
 			return _place_fruit(pts, y)
+		"perch_sink":
+			# A perch that sinks with the rider: rest, but hop off before it gets too low.
+			_spawn_perch(y)
+			_last_perch().sink = PERCH_SINK * (0.6 if reduced_motion else 1.0)
+			var pts := FruitLayout.wave(3, W * 0.5, 25.0, y - 260.0, 120.0, lo, hi)
+			return _place_fruit(pts, y)
 		"perch_lift":
 			# An elevator perch rising and sinking; a fruit column above it.
 			_spawn_perch(y, Vector2(0.0, PERCH_RISE))
@@ -1535,6 +1542,14 @@ func _spawn_perch(y: float, drift: Vector2 = Vector2.ZERO) -> void:
 	h.body = s
 	h.tick(0.0, 0.0)
 	last_perch_at = distance
+
+
+func _last_perch() -> Hazard:
+	for i in range(world.get_child_count() - 1, -1, -1):
+		var h := world.get_child(i) as Hazard
+		if h.kind == "perch":
+			return h
+	return null
 
 
 func _spawn_fruit(pos: Vector2) -> void:
