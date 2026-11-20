@@ -2,7 +2,7 @@
 
 ## Project
 One-tap pixel-art mobile game (portrait 720x1280, iOS first) built with Godot 4.x and GDScript.
-Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current version: v0.3.1.
+Tap to hop to the opposite wall (or onto a perch in the middle), dodge saws and spikes, collect fruit. Current version: v0.4.
 
 ## About the owner
 - Not a game developer. QA/automation engineer (Java, Python) who wants Claude to write the code.
@@ -13,7 +13,8 @@ Tap to hop to the opposite wall, dodge saws and spikes, collect fruit. Current v
 - `scenes/main.tscn` - entry scene, only holds the script
 - `scripts/main.gd` - game flow, player, spawning, collisions, UI (everything is built in code)
 - `scripts/zones.gd` - zone table (looks, start distance, pattern weights)
-- `scripts/hazard.gd` - scrolling hazard/fruit node: motion, hit capsule
+- `scripts/hazard.gd` - scrolling hazard/fruit/perch node: motion, hit capsule, fruit clearance
+- `scripts/fruit_layout.gd` - fruit placement shapes (scatter, wave, swoop, cluster)
 - `scripts/catalog.gd` - characters (shop prices, trail colours) and fruit values
 - `scripts/art.gd` - sprite sheet to SpriteFrames helper
 - `tests/sim_run.gd` - headless simulation + fairness test (must pass before a PR)
@@ -48,5 +49,5 @@ Never commit straight to `main`; every change goes through a branch and a Pull R
 
 ## Roadmap
 See `docs/GAME_DESIGN.md` for the full roadmap.
-- next: pause, full-screen iPhone layout (safe area), balance from playtesting
+- next: fruit bandits (Pixel Adventure 2 enemies), double tap for a higher hop, pause, safe area
 - later: more hazards, settings, iOS export (Xcode + Apple Developer account), ads/IAP plugins
