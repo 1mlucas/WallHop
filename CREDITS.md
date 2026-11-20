@@ -13,5 +13,7 @@ All third-party assets used in this project are released under **CC0 (public dom
 
 ## Sound effects
 - **The Essential Retro Video Game Sound Effects Collection [512 sounds]** by Juhani Junkala (CC0)
+- **Digital Audio** by Kenney - <https://kenney.nl> (CC0) - used: phaseJump1 (high hop), lowDown (perch about to give out)
+- **Impact Sounds** by Kenney - <https://kenney.nl> (CC0) - used: impactGeneric_light_002 (landing on a perch)
 
 Original license notes from the authors are kept in the `Licenses/` folder.
