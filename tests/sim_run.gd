@@ -303,11 +303,12 @@ func _test_perch() -> void:
 	_check(is_equal_approx(float(main.get("fly_to")), main.W * 0.5), "hop with a perch in reach must stop in the middle")
 	_finish_hop()
 	_check(main.get("perch") == lift, "player should stand on the perch")
-	_check(player.position == Vector2(main.W * 0.5, main.PLAYER_Y), "player should stand in the middle at PLAYER_Y")
+	_check(player.position.distance_to(Vector2(main.W * 0.5, main.PLAYER_Y)) < 8.0, "player should land in the middle near PLAYER_Y (%s)" % str(player.position))
 	for i in int(1.2 / DT):
 		main.call("_process", DT)
 	_check(main.get("perch") == lift and not main.get("flying"), "the perch should carry the player for a while")
-	_check(absf(lift.position.y - main.PERCH_STAND_Y) < 2.0, "the perch should park under the player (y=%.1f)" % lift.position.y)
+	_check(absf(lift.position.y - main.PERCH_STAND_Y) < 1.0, "the perch should park under the player (y=%.1f)" % lift.position.y)
+	_check(player.position.distance_to(Vector2(main.W * 0.5, main.PLAYER_Y)) < 1.0, "a still perch should hold the player at PLAYER_Y (%s)" % str(player.position))
 	_check(int(main.get("fruit_count")) >= 2, "riding the perch should collect the fruit above it (%d)" % int(main.get("fruit_count")))
 
 	# Tap: go on to the left wall (the one it was heading for).
@@ -355,7 +356,52 @@ func _test_perch() -> void:
 		if (main.call("_next_pattern") as String).begins_with("perch"):
 			perches += 1
 	_check(perches > 0, "perches never come back after the spacing")
+	_test_moving_perch("perch_slide", Vector2(main.PERCH_SLIDE, 0.0))
+	_test_moving_perch("perch_lift", Vector2(0.0, main.PERCH_RISE))
 	main.call("_show_title")
+
+
+## Moving perches: the hop lands on the plank wherever it is, the player rides
+## along with it, stays inside the shaft, and the next hop ends on a wall at PLAYER_Y.
+func _test_moving_perch(pattern: String, drift: Vector2) -> void:
+	var player: Node2D = main.get("player")
+	for reduced: bool in [false, true]:
+		main.set("reduced_motion", reduced)
+		main.call("_start_game")
+		main.set("since_row", -100000.0)
+		_clear_world()
+		main.call("_spawn_pattern", pattern, main.PERCH_STAND_Y - 120.0)
+		var lift: Hazard = null
+		for c in (main.get("world") as Node2D).get_children():
+			if (c as Hazard).kind == "perch":
+				lift = c
+		var expect := drift * (0.5 if reduced else 1.0)
+		_check(lift.drift.is_equal_approx(expect), "%s drift should be %s (reduced=%s), got %s" % [pattern, str(expect), str(reduced), str(lift.drift)])
+		main.call("_on_tap")
+		_finish_hop()
+		_check(main.get("perch") == lift, "%s: the hop should land on the moving perch" % pattern)
+		var feet: Vector2 = lift.perch_point() - Vector2(0, main.PERCH_FEET)
+		_check(player.position.distance_to(feet) < 1.0, "%s: player should stand on the plank" % pattern)
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for i in int(1.6 / DT):
+			main.call("_process", DT)
+			feet = lift.perch_point() - Vector2(0, main.PERCH_FEET)
+			_check(player.position.distance_to(feet) < 1.0, "%s: player fell off the moving plank" % pattern)
+			_check(player.position.x > main.CLING_L + 40.0 and player.position.x < main.CLING_R - 40.0, "%s: rider got too close to a wall" % pattern)
+			lo = lo.min(player.position)
+			hi = hi.max(player.position)
+		var travel := hi - lo
+		if drift.x > 0.0:
+			_check(travel.x > expect.x * 0.6, "%s: rider should glide sideways (%.0f px)" % [pattern, travel.x])
+		if drift.y > 0.0:
+			_check(travel.y > expect.y * 0.6, "%s: rider should rise and sink (%.0f px)" % [pattern, travel.y])
+		main.call("_on_tap")
+		_finish_hop()
+		_check(main.get("perch") == null and player.position.y == main.PLAYER_Y, "%s: hop from a moving perch must end on the wall at PLAYER_Y" % pattern)
+		_check(is_equal_approx(player.position.x, main.CLING_L) or is_equal_approx(player.position.x, main.CLING_R), "%s: hop must end on a wall" % pattern)
+	main.set("reduced_motion", false)
+	_clear_world()
 
 
 ## Continue after game over: price per use, limit, wallet, no double banking, protection.
